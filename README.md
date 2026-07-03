@@ -68,6 +68,14 @@ http://服务器IP:3000/
 http://服务器IP:3000/manage-8f3k2
 ```
 
+如果访问 `/install` 看到的是 `{"code":404,"msg":"Not Found"}` 这种 JSON，而不是中文初始化页面，通常说明 3000 端口不是这个新闻站容器在响应。先检查：
+
+```text
+http://服务器IP:3000/api/health
+```
+
+正常应该返回 `app: "sea-news-hub"` 和 `image: "ghcr.io/youshi01/news"`。
+
 如果 MySQL 在宿主机上，初始化页面的 MySQL 主机建议填写：
 
 ```text
@@ -79,6 +87,8 @@ host.docker.internal
 ```bash
 --add-host=host.docker.internal:host-gateway
 ```
+
+安装程序也会自动尝试 Docker 网关地址，例如容器默认网关、`172.17.0.1`、`172.18.0.1`。
 
 `.env` 建议不要给值加引号，特别是 Docker `env_file` 或 `--env-file` 部署时：
 

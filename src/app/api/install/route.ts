@@ -40,6 +40,132 @@ function buildDatabaseUrl(input: {
   return `mysql://${user}:${password}@${host}:${input.port}/${database}`;
 }
 
+function decodeRouteGateway(hexGateway: string) {
+  if (!/^[0-9A-Fa-f]{8}$/.test(hexGateway)) {
+    return "";
+  }
+
+  const octets = hexGateway
+    .match(/../g)
+    ?.reverse()
+    .map((part) => Number.parseInt(part, 16));
+
+  if (!octets || octets.some((octet) => !Number.isInteger(octet))) {
+    return "";
+  }
+
+  const gateway = octets.join(".");
+  return gateway === "0.0.0.0" ? "" : gateway;
+}
+
+function readDockerGatewayHosts() {
+  try {
+    const routes = fs.readFileSync("/proc/net/route", "utf8");
+
+    return routes
+      .split(/\r?\n/)
+      .slice(1)
+      .map((line) => line.trim().split(/\s+/))
+      .filter((columns) => columns[1] === "00000000")
+      .map((columns) => decodeRouteGateway(columns[2] || ""))
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+function uniqueValues(values: string[]) {
+  return Array.from(new Set(values.filter(Boolean)));
+}
+
+function shouldTryDockerHostFallback(host: string) {
+  const normalized = host.toLowerCase();
+
+  return [
+    "host.docker.internal",
+    "gateway.docker.internal",
+    "localhost",
+    "127.0.0.1"
+  ].includes(normalized);
+}
+
+function databaseHostCandidates(host: string) {
+  if (!shouldTryDockerHostFallback(host)) {
+    return [host];
+  }
+
+  return uniqueValues([
+    host,
+    "host.docker.internal",
+    "gateway.docker.internal",
+    ...readDockerGatewayHosts(),
+    "172.17.0.1",
+    "172.18.0.1"
+  ]);
+}
+
+function mysqlErrorCode(error: unknown) {
+  return typeof error === "object" && error && "code" in error
+    ? String((error as { code?: unknown }).code || "")
+    : "";
+}
+
+function isNetworkConnectionError(error: unknown) {
+  return [
+    "ENOTFOUND",
+    "ECONNREFUSED",
+    "ECONNRESET",
+    "ETIMEDOUT",
+    "EHOSTUNREACH",
+    "ENETUNREACH",
+    "PROTOCOL_CONNECTION_LOST"
+  ].includes(mysqlErrorCode(error));
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
+}
+
+async function connectToDatabase(input: {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+}) {
+  const attempts: string[] = [];
+  let lastError: unknown;
+
+  for (const candidateHost of databaseHostCandidates(input.host)) {
+    try {
+      const connection = await mysql.createConnection({
+        host: candidateHost,
+        port: input.port,
+        user: input.user,
+        password: input.password,
+        multipleStatements: true
+      });
+
+      return {
+        connection,
+        effectiveHost: candidateHost
+      };
+    } catch (error) {
+      lastError = error;
+      attempts.push(`${candidateHost}: ${errorMessage(error)}`);
+
+      if (!isNetworkConnectionError(error)) {
+        break;
+      }
+    }
+  }
+
+  throw new Error(
+    `MySQL 连接失败。已尝试 ${attempts.join("; ") || input.host}。${
+      lastError ? `最后错误：${errorMessage(lastError)}` : ""
+    }`
+  );
+}
+
 function readSchemaSql(database: string) {
   const initPath = path.join(process.cwd(), "sql", "init.sql");
   const initSql = fs.readFileSync(initPath, "utf8");
@@ -115,18 +241,24 @@ export async function POST(request: Request) {
   let connection: mysql.Connection | null = null;
 
   try {
-    connection = await mysql.createConnection({
+    const databaseConnection = await connectToDatabase({
       host,
       port,
       user,
-      password,
-      multipleStatements: true
+      password
     });
+    connection = databaseConnection.connection;
 
     await initializeSchema(connection, database);
 
     writeInstallConfig({
-      databaseUrl: buildDatabaseUrl({ host, port, database, user, password }),
+      databaseUrl: buildDatabaseUrl({
+        host: databaseConnection.effectiveHost,
+        port,
+        database,
+        user,
+        password
+      }),
       siteUrl,
       installedAt: new Date().toISOString()
     });

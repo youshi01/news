@@ -89,7 +89,7 @@ export default async function InstallPage({
           默认镜像可以不填安装口令。初始化成功后会跳转到后台登录页。上线后请修改默认后台路径、后台密码和 INSTALL_TOKEN。
         </p>
         <p className="install-note">
-          如果 MySQL 在 Docker 宿主机上，优先填写 host.docker.internal。Linux 服务器如果无法解析这个地址，请填写宿主机内网 IP，或用 README 里的 --add-host 参数启动容器。
+          如果 MySQL 在 Docker 宿主机上，优先填写 host.docker.internal。程序会自动尝试 Docker 网关 IP；如果仍然失败，请填写宿主机内网 IP，或用 README 里的 --add-host 参数启动容器。
         </p>
       </section>
     </main>
