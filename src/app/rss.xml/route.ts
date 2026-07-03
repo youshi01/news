@@ -1,4 +1,5 @@
 import { getArticles } from "@/lib/data";
+import { safeDate } from "@/lib/date-format";
 import { DEFAULT_LOCALE } from "@/lib/locales";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 
@@ -25,7 +26,7 @@ export async function GET() {
           <link>${escapeXml(url)}</link>
           <guid>${escapeXml(url)}</guid>
           <description>${escapeXml(article.description)}</description>
-          <pubDate>${new Date(article.publishedAt).toUTCString()}</pubDate>
+          <pubDate>${safeDate(article.publishedAt).toUTCString()}</pubDate>
           <source url="${escapeXml(article.sourceUrl)}">${escapeXml(article.sourceName)}</source>
         </item>
       `;

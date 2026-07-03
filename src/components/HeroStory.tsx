@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDateTime } from "@/lib/date-format";
 import type { NewsArticle } from "@/lib/types";
 
 type HeroStoryProps = {
@@ -21,12 +22,12 @@ export function HeroStory({ article }: HeroStoryProps) {
           <span>{article.sourceName}</span>
           <span>Heat {article.heatScore}</span>
           <time dateTime={article.publishedAt}>
-            {new Intl.DateTimeFormat("en", {
+            {formatDateTime(article.publishedAt, {
               month: "long",
               day: "numeric",
               hour: "2-digit",
               minute: "2-digit"
-            }).format(new Date(article.publishedAt))}
+            })}
           </time>
         </div>
       </div>

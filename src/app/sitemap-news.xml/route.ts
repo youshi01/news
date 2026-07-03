@@ -1,4 +1,5 @@
 import { getArticles } from "@/lib/data";
+import { safeDate } from "@/lib/date-format";
 import { DEFAULT_LOCALE } from "@/lib/locales";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 
@@ -16,7 +17,7 @@ function escapeXml(input = "") {
 export async function GET() {
   const articles = await getArticles(DEFAULT_LOCALE, 100);
   const recent = articles.filter((article) => {
-    const age = Date.now() - new Date(article.publishedAt).getTime();
+    const age = Date.now() - safeDate(article.publishedAt).getTime();
     return age < 1000 * 60 * 60 * 48;
   });
 
@@ -32,7 +33,7 @@ export async function GET() {
               <news:name>${escapeXml(siteConfig.name)}</news:name>
               <news:language>${escapeXml(article.locale)}</news:language>
             </news:publication>
-            <news:publication_date>${new Date(article.publishedAt).toISOString()}</news:publication_date>
+            <news:publication_date>${safeDate(article.publishedAt).toISOString()}</news:publication_date>
             <news:title>${escapeXml(article.title)}</news:title>
           </news:news>
         </url>

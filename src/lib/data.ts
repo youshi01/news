@@ -22,6 +22,11 @@ type ArticleRow = RowDataPacket & {
   heat_score: number;
 };
 
+function safeIsoDate(value: Date | string | null | undefined) {
+  const date = value ? new Date(value) : new Date();
+  return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+}
+
 function mapArticle(row: ArticleRow): NewsArticle {
   const content = row.content_html || row.summary || row.description || "";
 
@@ -42,7 +47,7 @@ function mapArticle(row: ArticleRow): NewsArticle {
     categorySlug: row.category_slug,
     sourceName: row.source_name || "Unknown source",
     sourceUrl: row.source_url,
-    publishedAt: (row.published_at || new Date()).toISOString(),
+    publishedAt: safeIsoDate(row.published_at),
     heatScore: Number(row.heat_score || 0),
     readingMinutes: readingTime(content)
   };
@@ -191,7 +196,7 @@ export async function getAllArticleUrls() {
   return rows.map((row) => ({
     locale: row.locale,
     slug: row.slug,
-    updatedAt: row.updated_at.toISOString()
+    updatedAt: safeIsoDate(row.updated_at)
   }));
 }
 
@@ -293,7 +298,7 @@ export async function getAdminStats(): Promise<AdminStats> {
       eventType: row.event_type,
       path: row.path,
       locale: row.locale,
-      createdAt: row.created_at.toISOString()
+      createdAt: safeIsoDate(row.created_at)
     }))
   };
 }

@@ -4,6 +4,7 @@ import { Analytics } from "@/components/Analytics";
 import { AdSlot } from "@/components/AdSlot";
 import { ArticleCard } from "@/components/ArticleCard";
 import { getArticleBySlug, getArticles } from "@/lib/data";
+import { formatDateTime } from "@/lib/date-format";
 import { normalizeLocale, SUPPORTED_LOCALES } from "@/lib/locales";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 
@@ -96,13 +97,13 @@ export default async function ArticlePage({
             <span>{article.sourceName}</span>
             <span>{article.readingMinutes} min read</span>
             <time dateTime={article.publishedAt}>
-              {new Intl.DateTimeFormat("en", {
+              {formatDateTime(article.publishedAt, {
                 month: "long",
                 day: "numeric",
                 year: "numeric",
                 hour: "2-digit",
                 minute: "2-digit"
-              }).format(new Date(article.publishedAt))}
+              })}
             </time>
           </div>
         </header>

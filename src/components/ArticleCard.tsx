@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { formatDateTime } from "@/lib/date-format";
 import type { NewsArticle } from "@/lib/types";
 
 type ArticleCardProps = {
@@ -24,12 +25,12 @@ export function ArticleCard({ article, compact }: ArticleCardProps) {
         <div className="source-row">
           <span>{article.sourceName}</span>
           <time dateTime={article.publishedAt}>
-            {new Intl.DateTimeFormat("en", {
+            {formatDateTime(article.publishedAt, {
               month: "short",
               day: "numeric",
               hour: "2-digit",
               minute: "2-digit"
-            }).format(new Date(article.publishedAt))}
+            })}
           </time>
         </div>
       </div>
