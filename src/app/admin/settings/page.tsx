@@ -1,9 +1,26 @@
 import { AdminNav } from "@/components/AdminNav";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
+import { getAdminSecurity } from "@/lib/admin-security";
+import { updateAdminPathAction, updateCredentialsAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-export default function AdminSettingsPage() {
+const errorMessages: Record<string, string> = {
+  password: "当前密码不正确。",
+  username: "账号只能包含字母、数字、点、下划线、@ 和短横线，长度 3-80 位。",
+  "new-password": "新密码至少需要 8 位。",
+  path: "后台路径格式不正确，请使用 /manage-xxxx 这样的路径。"
+};
+
+export default async function AdminSettingsPage({
+  searchParams
+}: {
+  searchParams: Promise<{ error?: string }>;
+}) {
+  const security = getAdminSecurity();
+  const { error } = await searchParams;
+  const errorMessage = error ? errorMessages[error] : "";
+
   return (
     <main className="app-shell admin-page">
       <div className="admin-hero">
@@ -15,7 +32,77 @@ export default function AdminSettingsPage() {
       </div>
       <AdminNav />
 
+      {errorMessage && (
+        <div className="install-error">
+          {errorMessage}
+        </div>
+      )}
+
       <section className="admin-grid">
+        <div className="admin-card">
+          <h2>账号和密码</h2>
+          <p>当前账号：<strong>{security.username}</strong></p>
+          <form className="admin-form" action={updateCredentialsAction}>
+            <label>
+              新管理员账号
+              <input
+                name="username"
+                defaultValue={security.username}
+                required
+                autoComplete="username"
+              />
+            </label>
+            <label>
+              新密码
+              <input
+                name="newPassword"
+                type="password"
+                minLength={8}
+                placeholder="不修改密码可以留空"
+                autoComplete="new-password"
+              />
+            </label>
+            <label>
+              当前密码
+              <input
+                name="currentPassword"
+                type="password"
+                required
+                autoComplete="current-password"
+              />
+            </label>
+            <button type="submit">保存账号和密码</button>
+          </form>
+        </div>
+
+        <div className="admin-card">
+          <h2>后台路径</h2>
+          <p>当前后台入口：<strong>{security.adminPath}</strong></p>
+          <form className="admin-form" action={updateAdminPathAction}>
+            <label>
+              新后台路径
+              <input
+                name="adminPath"
+                defaultValue={security.adminPath}
+                required
+                pattern="/[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*"
+              />
+            </label>
+            <label>
+              当前密码
+              <input
+                name="currentPassword"
+                type="password"
+                required
+                autoComplete="current-password"
+              />
+            </label>
+            <button type="submit">保存后台路径</button>
+          </form>
+        </div>
+      </section>
+
+      <section className="admin-grid settings-grid">
         <div className="admin-card">
           <h2>主题</h2>
           <p>选择一个后台/前台预览主题。当前选择会保存在这个浏览器里，后续可以接入 site_settings 做全站默认主题。</p>

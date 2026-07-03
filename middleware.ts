@@ -1,28 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ADMIN_RUNTIME_HEADER, getAdminRuntimeSecret } from "@/lib/admin-runtime-secret";
+import { getEnv } from "@/lib/env";
 
-function stripEnvQuotes(value?: string) {
-  const trimmed = value?.trim() || "";
+const DEFAULT_ADMIN_PATH = "/manage-8f3k2";
+const RUNTIME_CACHE_MS = 2000;
 
-  if (trimmed.length >= 2) {
-    const first = trimmed[0];
-    const last = trimmed[trimmed.length - 1];
+let cachedAdminPath = "";
+let cachedAdminPathExpiresAt = 0;
 
-    if ((first === `"` && last === `"`) || (first === "'" && last === "'")) {
-      return trimmed.slice(1, -1).trim();
-    }
-  }
-
-  return trimmed;
-}
-
-function getEnv(name: string, fallback = "") {
-  return stripEnvQuotes(process.env[name]) || fallback;
-}
-
-function getAdminPath() {
-  const raw = getEnv("ADMIN_PATH", "/admin");
-  const trimmed = raw.trim();
-  const withSlash = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+function normalizeAdminPath(input?: string, fallback = DEFAULT_ADMIN_PATH) {
+  const raw = input?.trim() || fallback;
+  const withSlash = raw.startsWith("/") ? raw : `/${raw}`;
   const normalized = withSlash.replace(/\/+$/, "");
 
   if (
@@ -30,12 +18,17 @@ function getAdminPath() {
     normalized === "/api" ||
     normalized.startsWith("/api/") ||
     normalized === "/_next" ||
-    normalized.startsWith("/_next/")
+    normalized.startsWith("/_next/") ||
+    normalized === "/install"
   ) {
-    return "/admin";
+    return fallback;
   }
 
-  return normalized || "/admin";
+  return normalized || fallback;
+}
+
+function getFallbackAdminPath() {
+  return normalizeAdminPath(getEnv("ADMIN_PATH", DEFAULT_ADMIN_PATH));
 }
 
 function notFound() {
@@ -44,54 +37,81 @@ function notFound() {
   });
 }
 
-function unauthorized() {
-  return new NextResponse("Authentication required", {
-    status: 401,
-    headers: {
-      "WWW-Authenticate": 'Basic realm="Admin"'
-    }
-  });
-}
-
-function decodeBasicAuth(value: string) {
-  try {
-    return atob(value);
-  } catch {
-    return "";
-  }
-}
-
-function parseBasicAuth(value: string) {
-  const decoded = decodeBasicAuth(value);
-  const separator = decoded.indexOf(":");
-
-  if (separator === -1) {
-    return null;
-  }
-
-  return {
-    user: decoded.slice(0, separator),
-    password: decoded.slice(separator + 1)
-  };
-}
-
-function secureCompare(left: string, right: string) {
-  let mismatch = left.length ^ right.length;
-  const maxLength = Math.max(left.length, right.length);
-
-  for (let index = 0; index < maxLength; index += 1) {
-    mismatch |= (left.charCodeAt(index) || 0) ^ (right.charCodeAt(index) || 0);
-  }
-
-  return mismatch === 0;
-}
-
 function isPathOrChild(pathname: string, base: string) {
   return pathname === base || pathname.startsWith(`${base}/`);
 }
 
-export function middleware(request: NextRequest) {
-  const adminPath = getAdminPath();
+function loginUrl(request: NextRequest, adminPath: string) {
+  const url = request.nextUrl.clone();
+  url.pathname = `${adminPath}/login`;
+  url.searchParams.set("next", request.nextUrl.pathname);
+  return url;
+}
+
+function rewriteAdmin(request: NextRequest, adminPath: string, pathname: string) {
+  const url = request.nextUrl.clone();
+  url.pathname = `/admin${pathname.slice(adminPath.length) || ""}`;
+
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-internal-admin-rewrite", adminPath);
+
+  return NextResponse.rewrite(url, {
+    request: {
+      headers: requestHeaders
+    }
+  });
+}
+
+async function fetchRuntime(request: NextRequest, includeCookie: boolean) {
+  const headers = new Headers();
+  headers.set(ADMIN_RUNTIME_HEADER, getAdminRuntimeSecret());
+
+  if (includeCookie) {
+    const cookie = request.headers.get("cookie");
+
+    if (cookie) {
+      headers.set("cookie", cookie);
+    }
+  }
+
+  try {
+    const response = await fetch(new URL("/api/admin/runtime", request.url), {
+      cache: "no-store",
+      headers
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return await response.json() as {
+      ok?: boolean;
+      adminPath?: string;
+      authenticated?: boolean;
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function getRuntimeAdminPath(request: NextRequest) {
+  const now = Date.now();
+
+  if (cachedAdminPath && cachedAdminPathExpiresAt > now) {
+    return cachedAdminPath;
+  }
+
+  const runtime = await fetchRuntime(request, false);
+  const adminPath = normalizeAdminPath(runtime?.adminPath, getFallbackAdminPath());
+
+  cachedAdminPath = adminPath;
+  cachedAdminPathExpiresAt = now + RUNTIME_CACHE_MS;
+
+  return adminPath;
+}
+
+export async function middleware(request: NextRequest) {
+  const adminPath = await getRuntimeAdminPath(request);
   const pathname = request.nextUrl.pathname;
   const isInternalAdminRewrite =
     request.headers.get("x-internal-admin-rewrite") === adminPath;
@@ -106,44 +126,23 @@ export function middleware(request: NextRequest) {
     return notFound();
   }
 
-  const user = getEnv("ADMIN_USER");
-  const password = getEnv("ADMIN_PASSWORD");
-  const missingCredentials = !user || !password;
+  const effectivePath = isCustomAdmin
+    ? pathname
+    : `${adminPath}${pathname.slice("/admin".length)}`;
+  const isLogin = effectivePath === `${adminPath}/login`;
+  const runtime = await fetchRuntime(request, true);
+  const authenticated = Boolean(runtime?.authenticated);
 
-  if (missingCredentials && process.env.NODE_ENV === "production") {
-    return notFound();
+  if (!authenticated && !isLogin) {
+    return NextResponse.redirect(loginUrl(request, adminPath));
   }
 
-  const shouldRequireAuth = !missingCredentials;
-
-  if (shouldRequireAuth) {
-    const auth = request.headers.get("authorization");
-
-    if (!auth?.startsWith("Basic ")) {
-      return unauthorized();
-    }
-
-    const credentials = parseBasicAuth(auth.slice(6));
-
-    if (
-      !credentials ||
-      !secureCompare(credentials.user, user) ||
-      !secureCompare(credentials.password, password)
-    ) {
-      return unauthorized();
-    }
+  if (authenticated && isLogin) {
+    return NextResponse.redirect(new URL(adminPath, request.url));
   }
 
   if (isCustomAdmin && adminPath !== "/admin") {
-    const url = request.nextUrl.clone();
-    url.pathname = `/admin${pathname.slice(adminPath.length)}`;
-    const requestHeaders = new Headers(request.headers);
-    requestHeaders.set("x-internal-admin-rewrite", adminPath);
-    return NextResponse.rewrite(url, {
-      request: {
-        headers: requestHeaders
-      }
-    });
+    return rewriteAdmin(request, adminPath, pathname);
   }
 
   return NextResponse.next();

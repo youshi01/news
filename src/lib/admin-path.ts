@@ -1,22 +1,7 @@
-import { getEnv } from "@/lib/env";
+import { getCurrentAdminPath } from "@/lib/admin-security";
 
 export function getAdminPath() {
-  const raw = getEnv("ADMIN_PATH", "/admin");
-  const trimmed = raw.trim();
-  const withSlash = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
-  const normalized = withSlash.replace(/\/+$/, "");
-
-  if (
-    !/^\/[a-zA-Z0-9_-]+(?:\/[a-zA-Z0-9_-]+)*$/.test(normalized) ||
-    normalized === "/api" ||
-    normalized.startsWith("/api/") ||
-    normalized === "/_next" ||
-    normalized.startsWith("/_next/")
-  ) {
-    return "/admin";
-  }
-
-  return normalized || "/admin";
+  return getCurrentAdminPath();
 }
 
 export function adminHref(path = "") {

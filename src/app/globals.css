@@ -528,7 +528,29 @@ img {
   text-transform: uppercase;
 }
 
+.admin-nav form {
+  margin-left: auto;
+}
+
+.admin-nav button {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  min-height: 35px;
+  padding: 9px 10px;
+  text-transform: uppercase;
+}
+
 .admin-nav a:hover {
+  background: var(--text);
+  color: var(--surface);
+}
+
+.admin-nav button:hover {
   background: var(--text);
   color: var(--surface);
 }
@@ -623,6 +645,93 @@ img {
   border-left: 0;
   margin: 12px 0 18px;
   padding-left: 0;
+}
+
+.admin-form {
+  display: grid;
+  gap: 13px;
+  margin-top: 16px;
+}
+
+.admin-form label {
+  color: var(--text);
+  display: grid;
+  font-family: Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 900;
+  gap: 7px;
+  text-transform: uppercase;
+}
+
+.admin-form input {
+  background: var(--surface-strong);
+  border: 1px solid var(--line);
+  color: var(--text);
+  min-height: 42px;
+  padding: 10px 12px;
+}
+
+.admin-form button {
+  background: var(--text);
+  border: 0;
+  color: var(--surface);
+  cursor: pointer;
+  font-family: Arial, sans-serif;
+  font-weight: 900;
+  min-height: 44px;
+  padding: 0 16px;
+  text-transform: uppercase;
+}
+
+.settings-success {
+  background: rgba(36, 118, 73, 0.12);
+  border: 1px solid #247649;
+  color: #174d30;
+  font-family: Arial, sans-serif;
+  font-weight: 800;
+  margin: 16px 0;
+  padding: 12px;
+}
+
+.login-page {
+  align-items: center;
+  background: var(--surface-strong);
+  display: flex;
+  min-height: 100vh;
+  padding: 22px;
+}
+
+.login-panel {
+  background: var(--surface);
+  border: 2px solid var(--text);
+  box-shadow: var(--shadow);
+  margin: 0 auto;
+  max-width: 460px;
+  padding: 28px;
+  width: 100%;
+}
+
+.login-panel h1 {
+  font-size: clamp(32px, 6vw, 48px);
+  line-height: 1;
+  margin: 10px 0 12px;
+}
+
+.login-panel p {
+  color: var(--muted);
+  font-family: Arial, sans-serif;
+  line-height: 1.5;
+}
+
+.login-mark {
+  align-items: center;
+  background: var(--text);
+  color: var(--surface);
+  display: inline-flex;
+  height: 42px;
+  justify-content: center;
+  margin-bottom: 14px;
+  width: 42px;
 }
 
 .theme-preview-grid {

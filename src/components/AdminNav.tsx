@@ -20,6 +20,9 @@ export function AdminNav() {
           {link.label}
         </Link>
       ))}
+      <form action="/api/admin/logout" method="post">
+        <button type="submit">退出登录</button>
+      </form>
     </nav>
   );
 }

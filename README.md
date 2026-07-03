@@ -6,6 +6,7 @@
 
 ```text
 地址：/manage-8f3k2
+登录：/manage-8f3k2/login
 账号：admin
 密码：ChangeMe_2026_admin
 ```
@@ -26,8 +27,11 @@ ChangeMe_Install_2026
 ADMIN_PATH=/your-private-admin-path
 ADMIN_USER=your_admin
 ADMIN_PASSWORD=your_long_random_password
+ADMIN_INTERNAL_TOKEN=your_long_internal_token
 INSTALL_TOKEN=your_long_install_token
 ```
+
+后台登录使用独立登录页和 HttpOnly Cookie，不再使用浏览器 Basic Auth 弹窗。进入后台后可以在“设置”里修改管理员账号、密码和后台路径，配置会保存到 `data/admin.json`。
 
 ## Docker 运行
 
@@ -52,6 +56,7 @@ docker run -d \
   -e ADMIN_PATH=/manage-8f3k2 \
   -e ADMIN_USER=admin \
   -e ADMIN_PASSWORD=ChangeMe_2026_admin \
+  -e ADMIN_INTERNAL_TOKEN=ChangeMe_Internal_Admin_2026 \
   -e INSTALL_TOKEN=ChangeMe_Install_2026 \
   ghcr.io/youshi01/news:latest
 ```
@@ -96,6 +101,7 @@ host.docker.internal
 ADMIN_PATH=/manage-8f3k2
 ADMIN_USER=admin
 ADMIN_PASSWORD=ChangeMe_2026_admin
+ADMIN_INTERNAL_TOKEN=ChangeMe_Internal_Admin_2026
 INSTALL_TOKEN=ChangeMe_Install_2026
 ```
 
