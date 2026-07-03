@@ -67,6 +67,7 @@ a {
 
 button,
 input,
+select,
 textarea {
   font: inherit;
 }
@@ -663,7 +664,8 @@ img {
   text-transform: uppercase;
 }
 
-.admin-form input {
+.admin-form input,
+.admin-form select {
   background: var(--surface-strong);
   border: 1px solid var(--line);
   color: var(--text);
@@ -681,6 +683,29 @@ img {
   min-height: 44px;
   padding: 0 16px;
   text-transform: uppercase;
+}
+
+.admin-inline-form {
+  align-items: end;
+  grid-template-columns: repeat(4, minmax(0, 1fr)) auto;
+}
+
+.source-inline-form {
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+}
+
+.row-actions {
+  align-items: center;
+  display: inline-flex;
+  gap: 8px;
+}
+
+.row-actions form {
+  margin: 0;
+}
+
+.danger-button {
+  color: var(--accent-strong);
 }
 
 .settings-success {
@@ -1001,6 +1026,14 @@ img {
 
   .data-list li {
     align-items: start;
+    grid-template-columns: 1fr;
+  }
+
+  .admin-inline-form {
+    grid-template-columns: 1fr;
+  }
+
+  .source-inline-form {
     grid-template-columns: 1fr;
   }
 

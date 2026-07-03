@@ -16,7 +16,7 @@ type TrendItem = Parser.Item & {
   approxTraffic?: string;
 };
 
-type GdeltArticle = {
+type RelatedArticle = {
   url: string;
   title: string;
   seendate?: string;
@@ -24,6 +24,21 @@ type GdeltArticle = {
   domain?: string;
   language?: string;
   sourcecountry?: string;
+  sourceName?: string;
+};
+
+type NewsFeedItem = Parser.Item & {
+  source?: string;
+  "media:content"?: {
+    $?: {
+      url?: string;
+    };
+  };
+  "media:thumbnail"?: {
+    $?: {
+      url?: string;
+    };
+  };
 };
 
 const marketConfigs: Record<string, MarketConfig> = {
@@ -37,6 +52,16 @@ const marketConfigs: Record<string, MarketConfig> = {
 const parser = new Parser<unknown, TrendItem>({
   customFields: {
     item: [["ht:approx_traffic", "approxTraffic"]]
+  }
+});
+
+const newsParser = new Parser<unknown, NewsFeedItem>({
+  customFields: {
+    item: [
+      ["source", "source"],
+      ["media:content", "media:content"],
+      ["media:thumbnail", "media:thumbnail"]
+    ]
   }
 });
 
@@ -95,6 +120,62 @@ function translationLocales(primaryLocale: string) {
   );
 }
 
+function marketFromGeo(geo: string, fallbackLocale = DEFAULT_LOCALE): MarketConfig {
+  const normalized = geo.trim().toUpperCase();
+
+  return (
+    marketConfigs[normalized] || {
+      geo: normalized || "GLOBAL",
+      locale: fallbackLocale || DEFAULT_LOCALE,
+      name: normalized || "Global"
+    }
+  );
+}
+
+function googleNewsParams(market: MarketConfig) {
+  const params: Record<string, { hl: string; gl: string; ceid: string }> = {
+    ID: { hl: "id-ID", gl: "ID", ceid: "ID:id" },
+    VN: { hl: "vi-VN", gl: "VN", ceid: "VN:vi" },
+    TH: { hl: "th-TH", gl: "TH", ceid: "TH:th" },
+    MY: { hl: "en-MY", gl: "MY", ceid: "MY:en" },
+    PH: { hl: "en-PH", gl: "PH", ceid: "PH:en" }
+  };
+
+  return params[market.geo] || { hl: "en-US", gl: "US", ceid: "US:en" };
+}
+
+function googleNewsSearchUrl(topic: string, market: MarketConfig) {
+  const params = googleNewsParams(market);
+  const url = new URL("https://news.google.com/search");
+  url.searchParams.set("q", topic);
+  url.searchParams.set("hl", params.hl);
+  url.searchParams.set("gl", params.gl);
+  url.searchParams.set("ceid", params.ceid);
+  return url.toString();
+}
+
+function hostname(input: string) {
+  try {
+    return new URL(input).hostname.replace(/^www\./, "");
+  } catch {
+    return "";
+  }
+}
+
+function cleanNewsTitle(title: string, sourceName?: string) {
+  const cleanTitle = stripHtml(title).trim();
+
+  if (!sourceName) {
+    return cleanTitle;
+  }
+
+  return cleanTitle.replace(new RegExp(`\\s+-\\s+${escapeRegExp(sourceName)}$`, "i"), "").trim();
+}
+
+function escapeRegExp(input: string) {
+  return input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function categoryForTopic(topic: string) {
   const text = topic.toLowerCase();
 
@@ -140,11 +221,22 @@ function uniqueSlug(topic: string, market: MarketConfig) {
   return `${base}-${suffix}`;
 }
 
+function articleSlug(title: string, url: string) {
+  const base = slugify(title) || "news";
+  const suffix = crypto.createHash("sha1").update(url).digest("hex").slice(0, 8);
+  return `${base}-${suffix}`;
+}
+
+function toValidDate(input: string | null | undefined) {
+  const date = input ? new Date(input) : new Date();
+  return Number.isNaN(date.getTime()) ? new Date() : date;
+}
+
 function trendTitle(topic: string, market: MarketConfig) {
   return `${topic}: why it is trending in ${market.name}`;
 }
 
-function buildDescription(topic: string, market: MarketConfig, articles: GdeltArticle[]) {
+function buildDescription(topic: string, market: MarketConfig, articles: RelatedArticle[]) {
   const domains = articles
     .map((article) => article.domain)
     .filter(Boolean)
@@ -160,7 +252,7 @@ function buildDescription(topic: string, market: MarketConfig, articles: GdeltAr
 function buildContent(
   topic: string,
   market: MarketConfig,
-  articles: GdeltArticle[],
+  articles: RelatedArticle[],
   approxTraffic?: string
 ) {
   const sourceItems = articles
@@ -266,10 +358,85 @@ async function getTrendItems(market: MarketConfig) {
     }));
 }
 
+function newsFeedImage(item: NewsFeedItem) {
+  return (
+    item["media:content"]?.$?.url ||
+    item["media:thumbnail"]?.$?.url ||
+    null
+  );
+}
+
+async function getGoogleNewsArticles(topic: string, market: MarketConfig) {
+  if (getEnv("HOT_NEWS_GOOGLE_NEWS_ENABLED", "true") === "false") {
+    return [] as RelatedArticle[];
+  }
+
+  const maxRecords = Number(getEnv("HOT_NEWS_ARTICLES_PER_TOPIC", "6"));
+  if (maxRecords <= 0) {
+    return [] as RelatedArticle[];
+  }
+
+  const params = googleNewsParams(market);
+  const url = new URL("https://news.google.com/rss/search");
+  url.searchParams.set("q", topic);
+  url.searchParams.set("hl", params.hl);
+  url.searchParams.set("gl", params.gl);
+  url.searchParams.set("ceid", params.ceid);
+
+  try {
+    const feed = await newsParser.parseURL(url.toString());
+
+    return feed.items
+      .filter((item) => item.link && item.title)
+      .slice(0, maxRecords)
+      .map((item) => {
+        const sourceName = stripHtml(item.source || "").trim();
+        const link = item.link || "";
+        const title = cleanNewsTitle(item.title || "", sourceName);
+
+        return {
+          url: link,
+          title,
+          seendate: item.isoDate || item.pubDate,
+          socialimage: normalizeImageUrl(newsFeedImage(item), link) || undefined,
+          domain: sourceName || hostname(link),
+          language: market.locale,
+          sourcecountry: market.geo,
+          sourceName
+        };
+      });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.warn(`[hot-news] Google News skipped for "${topic}": ${message}`);
+    return [] as RelatedArticle[];
+  }
+}
+
+function mergeRelatedArticles(articles: RelatedArticle[], limit: number) {
+  const seen = new Set<string>();
+  const merged: RelatedArticle[] = [];
+
+  for (const article of articles) {
+    const key = article.url || article.title.toLowerCase();
+    if (!article.title || !article.url || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    merged.push(article);
+
+    if (merged.length >= limit) {
+      break;
+    }
+  }
+
+  return merged;
+}
+
 async function getGdeltArticles(topic: string) {
   const maxRecords = Number(getEnv("HOT_NEWS_ARTICLES_PER_TOPIC", "6"));
   if (maxRecords <= 0) {
-    return [] as GdeltArticle[];
+    return [] as RelatedArticle[];
   }
 
   const minIntervalMs = Number(getEnv("GDELT_MIN_INTERVAL_MS", "5500"));
@@ -302,10 +469,10 @@ async function getGdeltArticles(topic: string) {
 
   if (!response.ok) {
     console.warn(`[hot-news] GDELT skipped for "${topic}": HTTP ${response.status}`);
-    return [] as GdeltArticle[];
+    return [] as RelatedArticle[];
   }
 
-  const data = (await response.json()) as { articles?: GdeltArticle[] };
+  const data = (await response.json()) as { articles?: RelatedArticle[] };
   return (data.articles || []).filter((article) => article.url && article.title);
 }
 
@@ -315,7 +482,8 @@ async function upsertHotTopic(
   topic: string,
   trendUrl: string,
   approxTraffic: string | undefined,
-  heatScore: number
+  heatScore: number,
+  provider = "google_trends"
 ) {
   const topicHash = sha256(`${market.geo}:${topic.toLowerCase()}`);
 
@@ -323,7 +491,7 @@ async function upsertHotTopic(
     `
       INSERT INTO hot_topics
         (provider, market, locale, topic, topic_hash, trend_url, approx_traffic, heat_score)
-      VALUES ('google_trends', ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON DUPLICATE KEY UPDATE
         last_seen_at = NOW(),
         times_seen = times_seen + 1,
@@ -331,17 +499,17 @@ async function upsertHotTopic(
         heat_score = GREATEST(heat_score, VALUES(heat_score)),
         trend_url = VALUES(trend_url)
     `,
-    [market.geo, market.locale, topic, topicHash, trendUrl, approxTraffic || null, heatScore]
+    [provider, market.geo, market.locale, topic, topicHash, trendUrl, approxTraffic || null, heatScore]
   );
 
   const [rows] = await connection.execute<mysql.RowDataPacket[]>(
     `
       SELECT id, article_id
       FROM hot_topics
-      WHERE provider = 'google_trends' AND market = ? AND topic_hash = ?
+      WHERE provider = ? AND market = ? AND topic_hash = ?
       LIMIT 1
     `,
-    [market.geo, topicHash]
+    [provider, market.geo, topicHash]
   );
 
   return {
@@ -358,7 +526,7 @@ async function createOrUpdateArticle(
   topic: string,
   trendUrl: string,
   approxTraffic: string | undefined,
-  articles: GdeltArticle[],
+  articles: RelatedArticle[],
   heatScore: number
 ) {
   const title = trendTitle(topic, market);
@@ -468,6 +636,141 @@ async function createOrUpdateArticle(
   return articleId;
 }
 
+async function createOrUpdateRelatedArticle(
+  connection: mysql.Connection,
+  sourceId: number,
+  market: MarketConfig,
+  topic: string,
+  article: RelatedArticle,
+  heatScore: number
+) {
+  const sourceUrl = article.url;
+  const sourceName = article.sourceName || article.domain || hostname(sourceUrl) || "source";
+  const title = stripHtml(article.title).trim();
+
+  if (!sourceUrl || !title) {
+    return { processed: false, created: false };
+  }
+
+  const description = truncate(
+    `${title} is related to the current ${topic} trend in ${market.name}.`,
+    180
+  );
+  const summary = truncate(
+    `${title} is one of the latest news signals connected to ${topic}.`,
+    260
+  );
+  const contentHtml = [
+    `<p>${escapeHtml(summary)}</p>`,
+    `<p><strong>Trend context:</strong> This article was discovered while tracking the hot search topic <strong>${escapeHtml(topic)}</strong> in ${escapeHtml(market.name)}.</p>`,
+    `<p><strong>Source:</strong> <a href="${escapeHtml(sourceUrl)}" rel="nofollow noopener" target="_blank">${escapeHtml(sourceName)}</a></p>`
+  ].join("");
+  const imageUrl = normalizeImageUrl(article.socialimage, sourceUrl);
+  const mediaAssetId = imageUrl ? await upsertMediaAsset(connection, imageUrl, sourceUrl) : null;
+  const urlHash = sha256(sourceUrl);
+  const contentHash = sha256(`${title}:${topic}:${sourceUrl}`);
+  const slug = articleSlug(title, sourceUrl);
+  const categorySlug = categoryForTopic(topic);
+  const publishedAt = toValidDate(article.seendate);
+
+  const [articleResult] = await connection.execute<mysql.ResultSetHeader>(
+    `
+      INSERT INTO articles
+        (
+          source_id,
+          media_asset_id,
+          source_url,
+          canonical_url,
+          url_hash,
+          content_hash,
+          image_url,
+          category_slug,
+          original_language,
+          published_at,
+          status,
+          heat_score
+        )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'published', ?)
+      ON DUPLICATE KEY UPDATE
+        media_asset_id = COALESCE(VALUES(media_asset_id), media_asset_id),
+        image_url = COALESCE(VALUES(image_url), image_url),
+        content_hash = VALUES(content_hash),
+        heat_score = GREATEST(heat_score, VALUES(heat_score)),
+        updated_at = CURRENT_TIMESTAMP
+    `,
+    [
+      sourceId,
+      mediaAssetId,
+      sourceUrl,
+      sourceUrl,
+      urlHash,
+      contentHash,
+      imageUrl,
+      categorySlug,
+      market.locale,
+      publishedAt,
+      Math.max(1, heatScore - 8)
+    ]
+  );
+
+  const articleId = articleResult.insertId || (await findArticleId(connection, urlHash));
+
+  if (!articleId) {
+    return { processed: false, created: false };
+  }
+
+  for (const locale of translationLocales(market.locale)) {
+    await connection.execute(
+      `
+        INSERT INTO article_translations
+          (
+            article_id,
+            locale,
+            slug,
+            title,
+            description,
+            summary,
+            content_html,
+            seo_title,
+            seo_description,
+            og_image,
+            translation_status,
+            review_status
+          )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          title = VALUES(title),
+          description = VALUES(description),
+          summary = VALUES(summary),
+          content_html = VALUES(content_html),
+          seo_title = VALUES(seo_title),
+          seo_description = VALUES(seo_description),
+          og_image = COALESCE(VALUES(og_image), og_image),
+          updated_at = CURRENT_TIMESTAMP
+      `,
+      [
+        articleId,
+        locale,
+        slug,
+        title,
+        description,
+        summary,
+        contentHtml,
+        title,
+        description,
+        imageUrl,
+        locale === market.locale ? "done" : "fallback",
+        locale === market.locale ? "auto" : "needs_localization"
+      ]
+    );
+  }
+
+  return {
+    processed: true,
+    created: articleResult.affectedRows === 1
+  };
+}
+
 async function findArticleId(connection: mysql.Connection, urlHash: string) {
   const [rows] = await connection.execute<mysql.RowDataPacket[]>(
     "SELECT id FROM articles WHERE url_hash = ? LIMIT 1",
@@ -475,6 +778,85 @@ async function findArticleId(connection: mysql.Connection, urlHash: string) {
   );
 
   return Number(rows[0]?.id || 0);
+}
+
+async function processHotTopic(
+  connection: mysql.Connection,
+  sourceId: number,
+  market: MarketConfig,
+  trend: { topic: string; trendUrl: string; approxTraffic?: string },
+  options: {
+    provider?: string;
+    includeGdelt?: boolean;
+    heatScore?: number;
+  } = {}
+) {
+  const maxRelated = Number(getEnv("HOT_NEWS_ARTICLES_PER_TOPIC", "6"));
+  const googleNewsArticles = await getGoogleNewsArticles(trend.topic, market);
+  let gdeltArticles: RelatedArticle[] = [];
+
+  if (options.includeGdelt) {
+    try {
+      gdeltArticles = await getGdeltArticles(trend.topic);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(`[hot-news] related news skipped for "${trend.topic}": ${message}`);
+    }
+  }
+
+  const relatedArticles = mergeRelatedArticles(
+    [...googleNewsArticles, ...gdeltArticles],
+    maxRelated
+  );
+  const heatScore =
+    options.heatScore ??
+    Math.min(99, Math.round(parseTraffic(trend.approxTraffic) / 2000)) +
+      Math.min(20, relatedArticles.length * 3);
+
+  const hotTopic = await upsertHotTopic(
+    connection,
+    market,
+    trend.topic,
+    trend.trendUrl,
+    trend.approxTraffic,
+    heatScore,
+    options.provider || "google_trends"
+  );
+
+  await createOrUpdateArticle(
+    connection,
+    sourceId,
+    hotTopic.id,
+    market,
+    trend.topic,
+    trend.trendUrl,
+    trend.approxTraffic,
+    relatedArticles,
+    heatScore
+  );
+
+  let relatedProcessed = 0;
+
+  for (const article of relatedArticles) {
+    const result = await createOrUpdateRelatedArticle(
+      connection,
+      sourceId,
+      market,
+      trend.topic,
+      article,
+      heatScore
+    );
+
+    if (result.processed) {
+      relatedProcessed += 1;
+    }
+  }
+
+  return {
+    fetched: 1 + relatedArticles.length,
+    created: 1 + relatedProcessed,
+    skipped: Math.max(0, relatedArticles.length - relatedProcessed)
+  };
 }
 
 export async function importHotNews() {
@@ -495,52 +877,29 @@ export async function importHotNews() {
       const sourceId = await ensureHotSource(connection, market);
       const trends = await getTrendItems(market);
       let createdOrUpdated = 0;
-      totalFetched += trends.length;
 
       for (const trend of trends) {
         if (!trend.topic) {
           continue;
         }
 
-        let relatedArticles: GdeltArticle[] = [];
+        const result = await processHotTopic(
+          connection,
+          sourceId,
+          market,
+          trend,
+          {
+            includeGdelt: relatedLookupsRemaining > 0
+          }
+        );
 
         if (relatedLookupsRemaining > 0) {
           relatedLookupsRemaining -= 1;
-          try {
-            relatedArticles = await getGdeltArticles(trend.topic);
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            console.warn(`[hot-news] related news skipped for "${trend.topic}": ${message}`);
-          }
         }
 
-        const heatScore =
-          Math.min(99, Math.round(parseTraffic(trend.approxTraffic) / 2000)) +
-          Math.min(20, relatedArticles.length * 3);
-
-        const hotTopic = await upsertHotTopic(
-          connection,
-          market,
-          trend.topic,
-          trend.trendUrl,
-          trend.approxTraffic,
-          heatScore
-        );
-
-        await createOrUpdateArticle(
-          connection,
-          sourceId,
-          hotTopic.id,
-          market,
-          trend.topic,
-          trend.trendUrl,
-          trend.approxTraffic,
-          relatedArticles,
-          heatScore
-        );
-
-        createdOrUpdated += 1;
-        totalCreated += 1;
+        createdOrUpdated += result.created;
+        totalFetched += result.fetched;
+        totalCreated += result.created;
       }
 
       await connection.execute(
@@ -578,6 +937,150 @@ export async function importHotNews() {
         WHERE id = ?
       `,
       [message, totalFetched, totalCreated, Math.max(0, totalFetched - totalCreated), task.insertId]
+    );
+
+    throw error;
+  } finally {
+    await connection.end();
+  }
+}
+
+export async function importManualHotTopic(input: {
+  topic: string;
+  market: string;
+  approxTraffic?: string;
+  heatScore?: number;
+}) {
+  const connection = await mysql.createConnection(getDatabaseUrl());
+  const market = marketFromGeo(input.market);
+  const [task] = await connection.execute<mysql.ResultSetHeader>(
+    `
+      INSERT INTO import_tasks (task_type, status, started_at)
+      VALUES ('hot_news', 'running', NOW())
+    `
+  );
+
+  try {
+    const sourceId = await ensureHotSource(connection, market);
+    const result = await processHotTopic(
+      connection,
+      sourceId,
+      market,
+      {
+        topic: input.topic,
+        trendUrl: googleNewsSearchUrl(input.topic, market),
+        approxTraffic: input.approxTraffic
+      },
+      {
+        provider: "manual",
+        includeGdelt: true,
+        heatScore: input.heatScore
+      }
+    );
+
+    await connection.execute(
+      `
+        UPDATE import_tasks
+        SET status = 'done',
+            finished_at = NOW(),
+            count_fetched = ?,
+            count_created = ?,
+            count_skipped = ?
+        WHERE id = ?
+      `,
+      [result.fetched, result.created, result.skipped, task.insertId]
+    );
+
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    await connection.execute(
+      `
+        UPDATE import_tasks
+        SET status = 'failed',
+            finished_at = NOW(),
+            error_message = ?
+        WHERE id = ?
+      `,
+      [message, task.insertId]
+    );
+
+    throw error;
+  } finally {
+    await connection.end();
+  }
+}
+
+export async function importHotTopicById(id: number) {
+  const connection = await mysql.createConnection(getDatabaseUrl());
+  const [task] = await connection.execute<mysql.ResultSetHeader>(
+    `
+      INSERT INTO import_tasks (task_type, status, started_at)
+      VALUES ('hot_news', 'running', NOW())
+    `
+  );
+
+  try {
+    const [rows] = await connection.execute<mysql.RowDataPacket[]>(
+      `
+        SELECT id, provider, market, locale, topic, trend_url, approx_traffic, heat_score
+        FROM hot_topics
+        WHERE id = ?
+        LIMIT 1
+      `,
+      [id]
+    );
+    const row = rows[0];
+
+    if (!row) {
+      throw new Error("热点词不存在。");
+    }
+
+    const market = marketFromGeo(String(row.market), String(row.locale || DEFAULT_LOCALE));
+    const sourceId = await ensureHotSource(connection, market);
+    const result = await processHotTopic(
+      connection,
+      sourceId,
+      market,
+      {
+        topic: String(row.topic),
+        trendUrl: String(row.trend_url || googleNewsSearchUrl(String(row.topic), market)),
+        approxTraffic: row.approx_traffic ? String(row.approx_traffic) : undefined
+      },
+      {
+        provider: String(row.provider || "manual"),
+        includeGdelt: true,
+        heatScore: Number(row.heat_score || 0) || undefined
+      }
+    );
+
+    await connection.execute(
+      `
+        UPDATE import_tasks
+        SET status = 'done',
+            finished_at = NOW(),
+            count_fetched = ?,
+            count_created = ?,
+            count_skipped = ?
+        WHERE id = ?
+      `,
+      [result.fetched, result.created, result.skipped, task.insertId]
+    );
+
+    return result;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+
+    await connection.execute(
+      `
+        UPDATE import_tasks
+        SET status = 'failed',
+            finished_at = NOW(),
+            error_message = ?
+        WHERE id = ?
+      `,
+      [message, task.insertId]
     );
 
     throw error;

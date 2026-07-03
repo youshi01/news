@@ -2,14 +2,14 @@ import { AdminNav } from "@/components/AdminNav";
 import { localeLabel, sourceTypeLabel } from "@/lib/admin-labels";
 import { getAdminSources } from "@/lib/admin-data";
 import { requireAdminPageSession } from "@/lib/admin-page-auth";
-import { importFeedsAction } from "./actions";
+import { addSourceAction, deleteSourceAction, importFeedsAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminSourcesPage({
   searchParams
 }: {
-  searchParams: Promise<{ import?: string; detail?: string }>;
+  searchParams: Promise<{ import?: string; source?: string; detail?: string }>;
 }) {
   await requireAdminPageSession();
   const importStatus = await searchParams;
@@ -39,6 +39,61 @@ export default async function AdminSourcesPage({
           {importStatus.detail && <small>{importStatus.detail}</small>}
         </div>
       )}
+      {importStatus.source === "added" && (
+        <div className="settings-success">
+          来源已添加。点击“立即导入 RSS 文章”可以马上抓取。
+        </div>
+      )}
+      {importStatus.source === "deleted" && (
+        <div className="settings-success">
+          来源已删除。已经导入的文章会保留。
+        </div>
+      )}
+      {importStatus.source === "failed" && (
+        <div className="install-error">
+          来源操作失败。
+          {importStatus.detail && <small>{importStatus.detail}</small>}
+        </div>
+      )}
+
+      <section className="admin-card">
+        <h2>新增 RSS 来源</h2>
+        <form className="admin-form admin-inline-form source-inline-form" action={addSourceAction}>
+          <label>
+            名称
+            <input name="name" required placeholder="例如 BBC News" />
+          </label>
+          <label>
+            站点地址
+            <input name="siteUrl" type="url" required placeholder="https://example.com" />
+          </label>
+          <label>
+            RSS 地址
+            <input name="rssUrl" type="url" required placeholder="https://example.com/feed.xml" />
+          </label>
+          <label>
+            语言
+            <select name="defaultLocale" defaultValue="en">
+              <option value="en">英语</option>
+              <option value="id">印尼语</option>
+              <option value="vi">越南语</option>
+              <option value="th">泰语</option>
+              <option value="ms-MY">马来语</option>
+              <option value="tl-PH">菲律宾语</option>
+              <option value="zh-Hans">简体中文</option>
+            </select>
+          </label>
+          <label>
+            分类
+            <input name="categorySlug" defaultValue="technology" />
+          </label>
+          <label>
+            间隔分钟
+            <input name="fetchIntervalMinutes" type="number" min="5" max="1440" defaultValue="60" />
+          </label>
+          <button type="submit">添加来源</button>
+        </form>
+      </section>
 
       {sources.length ? (
         <section className="admin-card">
@@ -76,6 +131,10 @@ export default async function AdminSourcesPage({
                 <a className="text-button" href={source.siteUrl} target="_blank" rel="noreferrer">
                   访问
                 </a>
+                <form action={deleteSourceAction}>
+                  <input type="hidden" name="id" value={source.id} />
+                  <button className="text-button danger-button" type="submit">删除</button>
+                </form>
               </li>
             ))}
           </ul>
