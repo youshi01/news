@@ -288,25 +288,11 @@ function buildDescription(topic: string, market: MarketConfig, articles: Related
 
 function buildContent(
   topic: string,
-  market: MarketConfig,
-  articles: RelatedArticle[]
+  market: MarketConfig
 ) {
-  const sourceItems = articles
-    .slice(0, 8)
-    .map((article) => {
-      const title = escapeHtml(article.title || article.domain || article.url);
-      const url = escapeHtml(article.url);
-      const domain = escapeHtml(article.domain || "source");
-
-      return `<li><a href="${url}" rel="nofollow noopener" target="_blank">${title}</a> <span>${domain}</span></li>`;
-    })
-    .join("");
-
   return [
-    `<p><strong>${escapeHtml(topic)}</strong> is drawing new coverage in ${escapeHtml(market.name)}. This page brings together recent reports and source links for quick follow-up.</p>`,
-    `<p><strong>What to watch:</strong> Track official updates, affected companies or people, regional impact, and whether the story develops beyond the first wave of coverage.</p>`,
-    `<p><strong>Sources:</strong> The links below point to original reporting and public updates. Details can change as publishers update their stories.</p>`,
-    sourceItems ? `<h2>Source links</h2><ul>${sourceItems}</ul>` : ""
+    `<p><strong>${escapeHtml(topic)}</strong> is drawing new coverage in ${escapeHtml(market.name)}. This page summarizes the latest context for quick follow-up.</p>`,
+    `<p><strong>What to watch:</strong> Track official updates, affected companies or people, regional impact, and whether the story develops beyond the first wave of coverage.</p>`
   ].join("");
 }
 
@@ -712,7 +698,7 @@ async function createOrUpdateArticle(
   const title = trendTitle(topic, market);
   const description = buildDescription(topic, market, articles);
   const summary = `${topic} is part of the latest news cycle in ${market.name}.`;
-  const contentHtml = buildContent(topic, market, articles);
+  const contentHtml = buildContent(topic, market);
   const sourceUrl = articles[0]?.url || trendUrl;
   const storedSourceUrl = columnUrl(sourceUrl, trendUrl);
   const imageUrl = normalizeImageUrl(articles.find((article) => article.socialimage)?.socialimage, sourceUrl);
@@ -830,7 +816,6 @@ async function createOrUpdateRelatedArticle(
   heatScore: number
 ) {
   const sourceUrl = article.url;
-  const sourceName = article.sourceName || article.domain || hostname(sourceUrl) || "source";
   const title = stripHtml(article.title).trim();
 
   if (!sourceUrl || !title) {
@@ -847,8 +832,7 @@ async function createOrUpdateRelatedArticle(
   );
   const contentHtml = [
     `<p>${escapeHtml(summary)}</p>`,
-    `<p>This story is linked with recent coverage around <strong>${escapeHtml(topic)}</strong> in ${escapeHtml(market.name)}.</p>`,
-    `<p><strong>Source:</strong> <a href="${escapeHtml(sourceUrl)}" rel="nofollow noopener" target="_blank">${escapeHtml(sourceName)}</a></p>`
+    `<p>This story is linked with recent coverage around <strong>${escapeHtml(topic)}</strong> in ${escapeHtml(market.name)}.</p>`
   ].join("");
   const imageUrl = normalizeImageUrl(article.socialimage, sourceUrl);
   const storedSourceUrl = columnUrl(

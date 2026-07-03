@@ -348,14 +348,10 @@ async function upsertMediaAsset(
   return Number(rows[0]?.id || 0) || null;
 }
 
-function buildContent(title: string, summary: string, sourceName: string, sourceUrl: string) {
+function buildContent(title: string, summary: string) {
   const cleanSummary = truncate(stripHtml(summary || title), 900);
 
-  return [
-    `<p>${escapeHtml(cleanSummary)}</p>`,
-    `<p><strong>Editorial note:</strong> This automated briefing summarizes the RSS signal and links to the original publisher for the full report.</p>`,
-    `<p><strong>Source:</strong> <a href="${escapeHtml(sourceUrl)}" rel="nofollow noopener" target="_blank">${escapeHtml(sourceName)}</a></p>`
-  ].join("");
+  return `<p>${escapeHtml(cleanSummary)}</p>`;
 }
 
 function uniqueSlug(title: string, url: string) {
@@ -434,7 +430,7 @@ async function insertArticle(
   const contentHash = sha256(`${title}:${summary}`);
   const slug = uniqueSlug(title, canonicalUrl);
   const description = truncate(summary || title, 180);
-  const contentHtml = buildContent(title, summary, source.name, canonicalUrl);
+  const contentHtml = buildContent(title, summary);
   const heatScore = Math.floor(35 + Math.random() * 60);
 
   const [articleResult] = await connection.execute<mysql.ResultSetHeader>(

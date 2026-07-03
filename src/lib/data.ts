@@ -61,8 +61,23 @@ function sourceName(row: ArticleRow) {
   return name;
 }
 
+function stripGeneratedSourceBlocks(input: string) {
+  return input
+    .replace(/<h2>\s*Source links\s*<\/h2>\s*<ul>[\s\S]*?<\/ul>/gi, "")
+    .replace(/<p>\s*<strong>\s*Sources?\s*:\s*<\/strong>[\s\S]*?<\/p>/gi, "")
+    .replace(
+      /<p>\s*<strong>\s*Editorial note\s*:\s*<\/strong>[\s\S]*?(?:automated briefing|rss signal|original publisher|original source|source links)[\s\S]*?<\/p>/gi,
+      ""
+    )
+    .replace(/<p>\s*This automated briefing[\s\S]*?<\/p>/gi, "")
+    .replace(/\s+and source links/gi, "")
+    .trim();
+}
+
 function mapArticle(row: ArticleRow): NewsArticle {
-  const content = row.content_html || row.summary || row.description || "";
+  const content = stripGeneratedSourceBlocks(
+    row.content_html || row.summary || row.description || ""
+  );
 
   return {
     id: Number(row.id),
@@ -71,7 +86,7 @@ function mapArticle(row: ArticleRow): NewsArticle {
     title: row.title,
     description: row.description || truncate(stripHtml(content), 155),
     summary: row.summary || truncate(stripHtml(content), 220),
-    contentHtml: row.content_html || `<p>${row.summary || row.description}</p>`,
+    contentHtml: content || `<p>${row.summary || row.description}</p>`,
     mediaAssetId: row.media_asset_id ? Number(row.media_asset_id) : null,
     imageUrl: articleImageUrl(row),
     categorySlug: row.category_slug,
