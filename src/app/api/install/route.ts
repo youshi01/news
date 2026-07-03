@@ -5,6 +5,8 @@ import { NextResponse } from "next/server";
 import { adminHref } from "@/lib/admin-path";
 import { isInstalled, writeInstallConfig } from "@/lib/runtime-config";
 
+const DEFAULT_INSTALL_TOKEN = "ChangeMe_Install_2026";
+
 function redirectToAdmin(request: Request) {
   return NextResponse.redirect(new URL(adminHref(), request.url), 303);
 }
@@ -59,8 +61,14 @@ export async function POST(request: Request) {
 
   const formData = await request.formData();
   const expectedToken = process.env.INSTALL_TOKEN || "";
+  const submittedToken = cleanField(formData, "installToken");
+  const usesDefaultInstallToken =
+    !expectedToken || expectedToken === DEFAULT_INSTALL_TOKEN;
 
-  if (expectedToken && cleanField(formData, "installToken") !== expectedToken) {
+  if (
+    !usesDefaultInstallToken &&
+    submittedToken !== expectedToken
+  ) {
     return NextResponse.redirect(new URL("/install?error=token", request.url), 303);
   }
 

@@ -16,7 +16,7 @@ export default async function InstallPage({
   const { error } = await searchParams;
   const errorMessage =
     error === "token"
-      ? "安装口令不正确。"
+      ? "安装口令不正确。如果你没有自定义 INSTALL_TOKEN，可以留空。"
       : error === "database"
         ? "数据库连接或初始化失败，请检查 MySQL 信息。"
         : error === "input"
@@ -36,11 +36,11 @@ export default async function InstallPage({
 
         <form className="install-form" action="/api/install" method="post">
           <label>
-            安装口令
+            安装口令，可选
             <input
               name="installToken"
               type="password"
-              placeholder="INSTALL_TOKEN"
+              placeholder="只有自定义 INSTALL_TOKEN 时才需要填写"
               autoComplete="off"
             />
           </label>
@@ -81,7 +81,7 @@ export default async function InstallPage({
         </form>
 
         <p className="install-note">
-          初始化成功后会跳转到后台登录页。上线后请修改默认后台路径和密码。
+          默认镜像可以不填安装口令。初始化成功后会跳转到后台登录页。上线后请修改默认后台路径、后台密码和 INSTALL_TOKEN。
         </p>
       </section>
     </main>
