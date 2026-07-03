@@ -1,0 +1,28 @@
+{
+  "name": "sea-news-hub",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "worker": "tsx scripts/worker.ts",
+    "import:hot-news": "tsx scripts/import-hot-news.ts",
+    "import:feeds": "tsx scripts/import-feeds.ts"
+  },
+  "dependencies": {
+    "lucide-react": "^1.23.0",
+    "mysql2": "^3.15.3",
+    "next": "^16.2.10",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "rss-parser": "^3.13.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.4",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}
