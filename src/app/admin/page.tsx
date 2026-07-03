@@ -4,6 +4,7 @@ import { AdminNav } from "@/components/AdminNav";
 import { adminHref } from "@/lib/admin-path";
 import { requireAdminPageSession } from "@/lib/admin-page-auth";
 import { getAdminStats } from "@/lib/data";
+import { importHotNewsAction } from "./hot-topics/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -89,6 +90,9 @@ export default async function AdminPage() {
 
       <section className="admin-card admin-shortcuts">
         <h2>运营入口</h2>
+        <form action={importHotNewsAction}>
+          <button className="text-button" type="submit">立即导入热点</button>
+        </form>
         <Link className="text-button" href={adminHref("/articles")}>文章管理</Link>
         <Link className="text-button" href={adminHref("/hot-topics")}>热点词</Link>
         <Link className="text-button" href={adminHref("/sources")}>来源管理</Link>
