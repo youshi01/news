@@ -9,18 +9,26 @@ export function ThemeToggle() {
   const [theme, setTheme] = useState<(typeof themes)[number]>("classic");
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("theme");
-    const initial = themes.includes(saved as (typeof themes)[number])
-      ? (saved as (typeof themes)[number])
-      : "classic";
-    setTheme(initial);
-    document.documentElement.dataset.theme = initial;
+    try {
+      const saved = window.localStorage.getItem("theme");
+      const initial = themes.includes(saved as (typeof themes)[number])
+        ? (saved as (typeof themes)[number])
+        : "classic";
+      setTheme(initial);
+      document.documentElement.dataset.theme = initial;
+    } catch {
+      document.documentElement.dataset.theme = "classic";
+    }
   }, []);
 
   function rotateTheme() {
     const next = themes[(themes.indexOf(theme) + 1) % themes.length];
     setTheme(next);
-    window.localStorage.setItem("theme", next);
+    try {
+      window.localStorage.setItem("theme", next);
+    } catch {
+      // Keep the visual theme change even when browser storage is unavailable.
+    }
     document.documentElement.dataset.theme = next;
   }
 

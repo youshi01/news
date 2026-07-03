@@ -19,17 +19,25 @@ export function ThemeSwitcher({ language = "en" }: ThemeSwitcherProps) {
   const [theme, setTheme] = useState<ThemeKey>("classic");
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("theme");
-    const initial = themes.some((item) => item.key === saved)
-      ? (saved as ThemeKey)
-      : "classic";
-    setTheme(initial);
-    document.documentElement.dataset.theme = initial;
+    try {
+      const saved = window.localStorage.getItem("theme");
+      const initial = themes.some((item) => item.key === saved)
+        ? (saved as ThemeKey)
+        : "classic";
+      setTheme(initial);
+      document.documentElement.dataset.theme = initial;
+    } catch {
+      document.documentElement.dataset.theme = "classic";
+    }
   }, []);
 
   function applyTheme(next: ThemeKey) {
     setTheme(next);
-    window.localStorage.setItem("theme", next);
+    try {
+      window.localStorage.setItem("theme", next);
+    } catch {
+      // Theme selection still applies for this page even if storage is blocked.
+    }
     document.documentElement.dataset.theme = next;
   }
 

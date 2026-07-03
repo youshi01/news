@@ -9,30 +9,50 @@ type AnalyticsProps = {
 };
 
 function getId(key: string) {
-  const existing = window.localStorage.getItem(key);
-  if (existing) {
-    return existing;
+  try {
+    const existing = window.localStorage.getItem(key);
+    if (existing) {
+      return existing;
+    }
+
+    const next = makeId();
+    window.localStorage.setItem(key, next);
+    return next;
+  } catch {
+    return makeId();
+  }
+}
+
+function makeId() {
+  try {
+    if (window.crypto?.randomUUID) {
+      return window.crypto.randomUUID();
+    }
+  } catch {
+    // Fall back below for insecure HTTP or restricted browser storage contexts.
   }
 
-  const next = crypto.randomUUID();
-  window.localStorage.setItem(key, next);
-  return next;
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 }
 
 function sendEvent(payload: Record<string, unknown>) {
   const body = JSON.stringify(payload);
 
-  if (navigator.sendBeacon) {
-    navigator.sendBeacon("/api/events", new Blob([body], { type: "application/json" }));
-    return;
-  }
+  try {
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon("/api/events", new Blob([body], { type: "application/json" }));
+      return;
+    }
 
-  fetch("/api/events", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body,
-    keepalive: true
-  }).catch(() => undefined);
+    fetch("/api/events", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body,
+      keepalive: true
+    }).catch(() => undefined);
+  } catch {
+    // Analytics must never break page rendering.
+  }
 }
 
 export function Analytics({ articleId, locale, eventType }: AnalyticsProps) {
