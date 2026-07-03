@@ -1,10 +1,12 @@
 import { AdminNav } from "@/components/AdminNav";
 import { localeLabel, sourceTypeLabel } from "@/lib/admin-labels";
 import { getAdminSources } from "@/lib/admin-data";
+import { requireAdminPageSession } from "@/lib/admin-page-auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminSourcesPage() {
+  await requireAdminPageSession();
   const sources = await getAdminSources(120);
 
   return (

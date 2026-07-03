@@ -2,11 +2,13 @@ import { BarChart3, Clock3, Eye, MousePointerClick } from "lucide-react";
 import Link from "next/link";
 import { AdminNav } from "@/components/AdminNav";
 import { adminHref } from "@/lib/admin-path";
+import { requireAdminPageSession } from "@/lib/admin-page-auth";
 import { getAdminStats } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
+  await requireAdminPageSession();
   const stats = await getAdminStats();
 
   return (

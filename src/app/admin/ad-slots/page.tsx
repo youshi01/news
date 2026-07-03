@@ -1,10 +1,12 @@
 import { AdminNav } from "@/components/AdminNav";
 import { adProviderLabel, localeLabel } from "@/lib/admin-labels";
 import { getAdminAdSlots } from "@/lib/admin-data";
+import { requireAdminPageSession } from "@/lib/admin-page-auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminAdSlotsPage() {
+  await requireAdminPageSession();
   const slots = await getAdminAdSlots(120);
 
   return (

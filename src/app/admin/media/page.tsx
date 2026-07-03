@@ -1,10 +1,12 @@
 import { AdminNav } from "@/components/AdminNav";
 import { storageTypeLabel } from "@/lib/admin-labels";
+import { requireAdminPageSession } from "@/lib/admin-page-auth";
 import { getMediaAssets } from "@/lib/media";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminMediaPage() {
+  await requireAdminPageSession();
   const mediaAssets = await getMediaAssets(80);
 
   return (

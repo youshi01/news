@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { AdminNav } from "@/components/AdminNav";
 import { localeLabel, marketLabel } from "@/lib/admin-labels";
+import { requireAdminPageSession } from "@/lib/admin-page-auth";
 import { getHotTopics } from "@/lib/hot-topics";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminHotTopicsPage() {
+  await requireAdminPageSession();
   const topics = await getHotTopics(100);
 
   return (

@@ -23,14 +23,23 @@ function safeNextPath(value: string) {
   return adminPath;
 }
 
-function loginRedirect(request: Request, error = false) {
-  const url = new URL(adminHref("/login"), request.url);
+function redirectResponse(location: string) {
+  return new NextResponse(null, {
+    status: 303,
+    headers: {
+      location
+    }
+  });
+}
+
+function loginRedirect(error = false) {
+  const url = new URL(adminHref("/login"), "http://internal.local");
 
   if (error) {
     url.searchParams.set("error", "1");
   }
 
-  return NextResponse.redirect(url, 303);
+  return redirectResponse(`${url.pathname}${url.search}`);
 }
 
 export async function POST(request: Request) {
@@ -40,10 +49,10 @@ export async function POST(request: Request) {
   const next = safeNextPath(cleanField(formData, "next"));
 
   if (!verifyAdminPassword(username, password)) {
-    return loginRedirect(request, true);
+    return loginRedirect(true);
   }
 
-  const response = NextResponse.redirect(new URL(next, request.url), 303);
+  const response = redirectResponse(next);
   response.cookies.set({
     name: ADMIN_SESSION_COOKIE,
     value: createAdminSessionValue(),

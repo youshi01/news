@@ -2,10 +2,12 @@ import Link from "next/link";
 import { AdminNav } from "@/components/AdminNav";
 import { articleStatusLabel, categoryLabel, localeLabel } from "@/lib/admin-labels";
 import { getAdminArticles } from "@/lib/admin-data";
+import { requireAdminPageSession } from "@/lib/admin-page-auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminArticlesPage() {
+  await requireAdminPageSession();
   const articles = await getAdminArticles(120);
 
   return (

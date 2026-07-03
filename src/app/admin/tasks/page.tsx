@@ -1,10 +1,12 @@
 import { AdminNav } from "@/components/AdminNav";
 import { taskStatusLabel, taskTypeLabel } from "@/lib/admin-labels";
 import { getAdminTasks } from "@/lib/admin-data";
+import { requireAdminPageSession } from "@/lib/admin-page-auth";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminTasksPage() {
+  await requireAdminPageSession();
   const tasks = await getAdminTasks(120);
 
   return (

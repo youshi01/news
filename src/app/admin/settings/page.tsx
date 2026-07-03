@@ -1,6 +1,7 @@
 import { AdminNav } from "@/components/AdminNav";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { getAdminSecurity } from "@/lib/admin-security";
+import { requireAdminPageSession } from "@/lib/admin-page-auth";
 import { updateAdminPathAction, updateCredentialsAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export default async function AdminSettingsPage({
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
+  await requireAdminPageSession();
   const security = getAdminSecurity();
   const { error } = await searchParams;
   const errorMessage = error ? errorMessages[error] : "";
