@@ -199,6 +199,7 @@ export async function getAdminStats(): Promise<AdminStats> {
   const totals = await query<
     Array<
       RowDataPacket & {
+        article_count: number;
         page_views: number;
         article_views: number;
         clicks: number;
@@ -208,6 +209,10 @@ export async function getAdminStats(): Promise<AdminStats> {
   >(
     `
       SELECT
+        (
+          SELECT COUNT(*) FROM articles
+          WHERE status = 'published'
+        ) AS article_count,
         SUM(event_type = 'page_view') AS page_views,
         SUM(event_type = 'article_view') AS article_views,
         (
@@ -273,6 +278,7 @@ export async function getAdminStats(): Promise<AdminStats> {
   const total = totals[0];
 
   return {
+    articleCount: Number(total?.article_count || 0),
     pageViews: Number(total?.page_views || 0),
     articleViews: Number(total?.article_views || 0),
     clicks: Number(total?.clicks || 0),

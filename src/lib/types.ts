@@ -17,6 +17,7 @@ export type NewsArticle = {
 };
 
 export type AdminStats = {
+  articleCount: number;
   pageViews: number;
   articleViews: number;
   clicks: number;

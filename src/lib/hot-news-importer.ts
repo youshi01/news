@@ -66,6 +66,8 @@ const newsParser = new Parser<unknown, NewsFeedItem>({
 });
 
 let lastGdeltRequestAt = 0;
+const ARTICLE_URL_MAX = 900;
+const MEDIA_ORIGINAL_URL_MAX = 1000;
 
 function getDatabaseUrl() {
   const url = getRuntimeDatabaseUrl();
@@ -160,6 +162,34 @@ function hostname(input: string) {
   } catch {
     return "";
   }
+}
+
+function originUrl(input: string) {
+  try {
+    const url = new URL(input);
+    return `${url.protocol}//${url.hostname}/`;
+  } catch {
+    return "";
+  }
+}
+
+function columnUrl(input: string | null | undefined, fallback = "", max = ARTICLE_URL_MAX) {
+  const value = String(input || "").trim();
+  if (value.length > 0 && value.length <= max) {
+    return value;
+  }
+
+  const fallbackValue = String(fallback || "").trim();
+  if (fallbackValue.length > 0 && fallbackValue.length <= max) {
+    return fallbackValue;
+  }
+
+  const origin = originUrl(value) || originUrl(fallbackValue);
+  if (origin && origin.length <= max) {
+    return origin;
+  }
+
+  return value.slice(0, max);
 }
 
 function cleanNewsTitle(title: string, sourceName?: string) {
@@ -297,6 +327,8 @@ async function upsertMediaAsset(
   sourceUrl: string
 ) {
   const urlHash = sha256(imageUrl);
+  const storedOriginalUrl = columnUrl(imageUrl, originUrl(imageUrl), MEDIA_ORIGINAL_URL_MAX);
+  const storedSourceUrl = columnUrl(sourceUrl);
 
   await connection.execute(
     `
@@ -304,7 +336,7 @@ async function upsertMediaAsset(
         (original_url, url_hash, source_url, asset_type, storage_type, status)
       VALUES (?, ?, ?, 'image', 'remote_proxy', 'active')
     `,
-    [imageUrl, urlHash, sourceUrl]
+    [storedOriginalUrl, urlHash, storedSourceUrl]
   );
 
   const [rows] = await connection.execute<mysql.RowDataPacket[]>(
@@ -486,6 +518,7 @@ async function upsertHotTopic(
   provider = "google_trends"
 ) {
   const topicHash = sha256(`${market.geo}:${topic.toLowerCase()}`);
+  const storedTrendUrl = columnUrl(trendUrl, googleNewsSearchUrl(topic, market));
 
   await connection.execute(
     `
@@ -499,7 +532,7 @@ async function upsertHotTopic(
         heat_score = GREATEST(heat_score, VALUES(heat_score)),
         trend_url = VALUES(trend_url)
     `,
-    [provider, market.geo, market.locale, topic, topicHash, trendUrl, approxTraffic || null, heatScore]
+    [provider, market.geo, market.locale, topic, topicHash, storedTrendUrl, approxTraffic || null, heatScore]
   );
 
   const [rows] = await connection.execute<mysql.RowDataPacket[]>(
@@ -534,8 +567,13 @@ async function createOrUpdateArticle(
   const summary = `${topic} is a current search trend in ${market.name}.`;
   const contentHtml = buildContent(topic, market, articles, approxTraffic);
   const sourceUrl = articles[0]?.url || trendUrl;
+  const storedSourceUrl = columnUrl(sourceUrl, trendUrl);
   const imageUrl = normalizeImageUrl(articles.find((article) => article.socialimage)?.socialimage, sourceUrl);
-  const mediaAssetId = imageUrl ? await upsertMediaAsset(connection, imageUrl, sourceUrl) : null;
+  const storedImageUrl = imageUrl && imageUrl.length <= ARTICLE_URL_MAX ? imageUrl : null;
+  const mediaAssetId =
+    imageUrl && imageUrl.length <= MEDIA_ORIGINAL_URL_MAX
+      ? await upsertMediaAsset(connection, imageUrl, sourceUrl)
+      : null;
   const urlHash = sha256(`hot-news:${market.geo}:${topic.toLowerCase()}`);
   const contentHash = sha256(`${topic}:${articles.map((article) => article.url).join("|")}`);
   const slug = uniqueSlug(topic, market);
@@ -569,11 +607,11 @@ async function createOrUpdateArticle(
     [
       sourceId,
       mediaAssetId,
-      sourceUrl,
-      sourceUrl,
+      storedSourceUrl,
+      storedSourceUrl,
       urlHash,
       contentHash,
-      imageUrl,
+      storedImageUrl,
       categorySlug,
       market.locale,
       heatScore
@@ -621,7 +659,7 @@ async function createOrUpdateArticle(
         contentHtml,
         title,
         description,
-        imageUrl,
+        storedImageUrl,
         locale === market.locale ? "done" : "fallback",
         locale === market.locale ? "auto" : "needs_localization"
       ]
@@ -666,7 +704,15 @@ async function createOrUpdateRelatedArticle(
     `<p><strong>Source:</strong> <a href="${escapeHtml(sourceUrl)}" rel="nofollow noopener" target="_blank">${escapeHtml(sourceName)}</a></p>`
   ].join("");
   const imageUrl = normalizeImageUrl(article.socialimage, sourceUrl);
-  const mediaAssetId = imageUrl ? await upsertMediaAsset(connection, imageUrl, sourceUrl) : null;
+  const storedSourceUrl = columnUrl(
+    sourceUrl,
+    googleNewsSearchUrl(`${topic} ${title}`, market)
+  );
+  const storedImageUrl = imageUrl && imageUrl.length <= ARTICLE_URL_MAX ? imageUrl : null;
+  const mediaAssetId =
+    imageUrl && imageUrl.length <= MEDIA_ORIGINAL_URL_MAX
+      ? await upsertMediaAsset(connection, imageUrl, sourceUrl)
+      : null;
   const urlHash = sha256(sourceUrl);
   const contentHash = sha256(`${title}:${topic}:${sourceUrl}`);
   const slug = articleSlug(title, sourceUrl);
@@ -701,11 +747,11 @@ async function createOrUpdateRelatedArticle(
     [
       sourceId,
       mediaAssetId,
-      sourceUrl,
-      sourceUrl,
+      storedSourceUrl,
+      storedSourceUrl,
       urlHash,
       contentHash,
-      imageUrl,
+      storedImageUrl,
       categorySlug,
       market.locale,
       publishedAt,
@@ -758,7 +804,7 @@ async function createOrUpdateRelatedArticle(
         contentHtml,
         title,
         description,
-        imageUrl,
+        storedImageUrl,
         locale === market.locale ? "done" : "fallback",
         locale === market.locale ? "auto" : "needs_localization"
       ]

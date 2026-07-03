@@ -1,4 +1,4 @@
-import { BarChart3, Clock3, Eye, MousePointerClick } from "lucide-react";
+import { BarChart3, Clock3, Eye, FileText, MousePointerClick } from "lucide-react";
 import Link from "next/link";
 import { AdminNav } from "@/components/AdminNav";
 import { adminHref } from "@/lib/admin-path";
@@ -24,6 +24,11 @@ export default async function AdminPage() {
       <AdminNav />
 
       <section className="stats-grid">
+        <div className="admin-card">
+          <FileText size={22} />
+          <span className="stat-number">{stats.articleCount}</span>
+          <p>文章总数量</p>
+        </div>
         <div className="admin-card">
           <Eye size={22} />
           <span className="stat-number">{stats.pageViews}</span>
@@ -97,7 +102,7 @@ export default async function AdminPage() {
         <Link className="text-button" href={adminHref("/hot-topics")}>热点词</Link>
         <Link className="text-button" href={adminHref("/sources")}>来源管理</Link>
         <Link className="text-button" href={adminHref("/tasks")}>任务记录</Link>
-        <Link className="text-button" href={adminHref("/media")}>图片管理</Link>
+        <Link className="text-button" href={adminHref("/media")}>媒体管理</Link>
         <Link className="text-button" href={adminHref("/ad-slots")}>广告位</Link>
         <Link className="text-button" href={adminHref("/settings")}>设置</Link>
       </section>

@@ -54,6 +54,9 @@ const parser = new Parser<unknown, CustomFeedItem>({
   }
 });
 
+const ARTICLE_URL_MAX = 900;
+const MEDIA_ORIGINAL_URL_MAX = 1000;
+
 const defaultSources: SourceRow[] = [
   {
     id: 0,
@@ -156,6 +159,34 @@ function normalizeUrl(input: string | null | undefined, baseUrl: string) {
   } catch {
     return null;
   }
+}
+
+function originUrl(input: string) {
+  try {
+    const url = new URL(input);
+    return `${url.protocol}//${url.hostname}/`;
+  } catch {
+    return "";
+  }
+}
+
+function columnUrl(input: string | null | undefined, fallback = "", max = ARTICLE_URL_MAX) {
+  const value = String(input || "").trim();
+  if (value.length > 0 && value.length <= max) {
+    return value;
+  }
+
+  const fallbackValue = String(fallback || "").trim();
+  if (fallbackValue.length > 0 && fallbackValue.length <= max) {
+    return fallbackValue;
+  }
+
+  const origin = originUrl(value) || originUrl(fallbackValue);
+  if (origin && origin.length <= max) {
+    return origin;
+  }
+
+  return value.slice(0, max);
 }
 
 function decodeHtml(input = "") {
@@ -297,6 +328,8 @@ async function upsertMediaAsset(
   assetType: "image" | "video" = "image"
 ) {
   const urlHash = sha256(imageUrl);
+  const storedOriginalUrl = columnUrl(imageUrl, originUrl(imageUrl), MEDIA_ORIGINAL_URL_MAX);
+  const storedSourceUrl = columnUrl(sourceUrl);
 
   await connection.execute(
     `
@@ -304,7 +337,7 @@ async function upsertMediaAsset(
         (original_url, url_hash, source_url, asset_type, storage_type, status)
       VALUES (?, ?, ?, ?, 'remote_proxy', 'active')
     `,
-    [imageUrl, urlHash, sourceUrl, assetType]
+    [storedOriginalUrl, urlHash, storedSourceUrl, assetType]
   );
 
   const [rows] = await connection.execute<mysql.RowDataPacket[]>(
@@ -375,16 +408,20 @@ async function insertArticle(
 
   const metadata = await fetchArticleMetadata(link);
   const canonicalUrl = metadata.canonicalUrl || link;
+  const storedSourceUrl = columnUrl(link, source.site_url);
+  const storedCanonicalUrl = columnUrl(canonicalUrl, storedSourceUrl);
   const title = stripHtml(metadata.title || feedTitle).trim();
   const feedSummary = item.contentSnippet || item.summary || item["content:encoded"] || item.content || "";
   const summary = stripHtml(metadata.description || feedSummary || title);
   const imageUrl = normalizeUrl(getFeedImage(item), link) || metadata.imageUrl;
   const videoUrl = normalizeUrl(getFeedVideo(item), link) || metadata.videoUrl;
+  const storedImageUrl = imageUrl && imageUrl.length <= ARTICLE_URL_MAX ? imageUrl : null;
   const mediaAssetId = imageUrl
+    && imageUrl.length <= MEDIA_ORIGINAL_URL_MAX
     ? await upsertMediaAsset(connection, imageUrl, canonicalUrl)
     : null;
 
-  if (videoUrl) {
+  if (videoUrl && videoUrl.length <= MEDIA_ORIGINAL_URL_MAX) {
     await upsertMediaAsset(connection, videoUrl, canonicalUrl, "video");
   }
 
@@ -422,11 +459,11 @@ async function insertArticle(
     [
       source.id || null,
       mediaAssetId,
-      link,
-      canonicalUrl,
+      storedSourceUrl,
+      storedCanonicalUrl,
       urlHash,
       contentHash,
-      imageUrl,
+      storedImageUrl,
       source.category_slug || "technology",
       source.default_locale || "en",
       toValidDate(publishedAt),
@@ -452,7 +489,7 @@ async function insertArticle(
             canonical_url = COALESCE(canonical_url, ?)
         WHERE id = ?
       `,
-      [mediaAssetId, imageUrl, canonicalUrl, articleId]
+      [mediaAssetId, storedImageUrl, storedCanonicalUrl, articleId]
     );
   }
 
@@ -486,7 +523,7 @@ async function insertArticle(
         contentHtml,
         title,
         description,
-        imageUrl,
+        storedImageUrl,
         locale === source.default_locale ? "done" : "fallback",
         locale === source.default_locale ? "auto" : "needs_localization"
       ]
