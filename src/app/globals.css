@@ -468,7 +468,6 @@ img {
   text-decoration: underline;
 }
 
-.source-box,
 .admin-card {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -476,13 +475,11 @@ img {
   padding: 18px;
 }
 
-.source-box h2,
 .admin-card h2,
 .admin-card h3 {
   margin-top: 0;
 }
 
-.source-box p,
 .admin-card p {
   color: var(--muted);
   font-family: Arial, sans-serif;

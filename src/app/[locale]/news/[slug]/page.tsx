@@ -123,16 +123,6 @@ export default async function ArticlePage({
           dangerouslySetInnerHTML={{ __html: article.contentHtml }}
         />
         <AdSlot placement="article_middle" />
-        <div className="source-box">
-          <h2>Source</h2>
-          <p>
-            This automated briefing links back to the original source. Read the source
-            for full context and updates.
-          </p>
-          <a className="text-button" href={article.sourceUrl} rel="nofollow noopener" target="_blank">
-            Open source
-          </a>
-        </div>
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
