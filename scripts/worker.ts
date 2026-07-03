@@ -1,5 +1,5 @@
-import { importFeeds } from "./import-feeds";
 import { getEnv } from "../src/lib/env";
+import { importFeeds } from "../src/lib/feed-importer";
 import { importHotNews } from "../src/lib/hot-news-importer";
 import { getRuntimeDatabaseUrl } from "../src/lib/runtime-config";
 
@@ -20,7 +20,7 @@ async function runOnce() {
   try {
     await importHotNews();
 
-    if (getEnv("ENABLE_RSS_IMPORT") === "true") {
+    if (getEnv("ENABLE_RSS_IMPORT", "true") !== "false") {
       await importFeeds();
     }
   } catch (error) {

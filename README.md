@@ -1,27 +1,20 @@
 # Southeast Signal News
 
-多语言热点新闻站，目标是自动发现热点、生成 SEO 新闻页、统计流量，并为后续广告位接入做准备。
+多语言新闻/热点 SEO 站点，支持 Docker 部署、MySQL 初始化、后台登录、隐藏后台路径、流量统计、广告位预留、热点词导入和 RSS 文章导入。
 
 ## 默认后台
 
 ```text
-地址：/manage-8f3k2
-登录：/manage-8f3k2/login
+后台地址：/manage-8f3k2
+登录地址：/manage-8f3k2/login
 账号：admin
 密码：ChangeMe_2026_admin
+安装口令：ChangeMe_Install_2026
 ```
 
-首次部署后访问首页 `/`，未初始化数据库时会自动进入 `/install`。
+首次部署后访问首页 `/`，如果还没有初始化数据库，会自动进入 `/install`。使用默认安装口令时，安装页里的“安装口令”可以留空；如果你在 `.env` 里改了 `INSTALL_TOKEN`，安装时就需要填写。
 
-默认安装口令：
-
-```text
-ChangeMe_Install_2026
-```
-
-使用默认安装口令时，安装页面里的“安装口令”可以留空。只有你在 `.env` 里改成自定义 `INSTALL_TOKEN` 后，安装时才必须填写。
-
-上线后请立即修改 `.env`：
+上线后建议马上改这些环境变量：
 
 ```env
 ADMIN_PATH=/your-private-admin-path
@@ -32,23 +25,12 @@ ADMIN_COOKIE_SECURE=false
 INSTALL_TOKEN=your_long_install_token
 ```
 
-后台登录使用独立登录页和 HttpOnly Cookie，不再使用浏览器 Basic Auth 弹窗。进入后台后可以在“设置”里修改管理员账号、密码和后台路径，配置会保存到 `data/admin.json`。
+本地或直接用 `http://服务器IP:3000` 测试时，`ADMIN_COOKIE_SECURE` 必须保持 `false`，否则浏览器不会保存登录 Cookie。正式 HTTPS 反代上线后可以改成 `true`。
 
 ## Docker 运行
 
 ```bash
-docker compose up -d
-```
-
-如果使用 GitHub Actions 构建的镜像：
-
-```bash
 docker pull ghcr.io/youshi01/news:latest
-```
-
-直接运行镜像：
-
-```bash
 docker run -d \
   --name news \
   -p 3000:3000 \
@@ -60,6 +42,7 @@ docker run -d \
   -e ADMIN_INTERNAL_TOKEN=ChangeMe_Internal_Admin_2026 \
   -e ADMIN_COOKIE_SECURE=false \
   -e INSTALL_TOKEN=ChangeMe_Install_2026 \
+  -e ENABLE_RSS_IMPORT=true \
   ghcr.io/youshi01/news:latest
 ```
 
@@ -69,46 +52,85 @@ docker run -d \
 http://服务器IP:3000/
 ```
 
-第一次访问会进入 `/install` 初始化数据库。初始化完成后后台入口是：
-
-```text
-http://服务器IP:3000/manage-8f3k2
-```
-
-如果访问 `/install` 看到的是 `{"code":404,"msg":"Not Found"}` 这种 JSON，而不是中文初始化页面，通常说明 3000 端口不是这个新闻站容器在响应。先检查：
-
-```text
-http://服务器IP:3000/api/health
-```
-
-正常应该返回 `app: "sea-news-hub"` 和 `image: "ghcr.io/youshi01/news"`。
-
-如果 MySQL 在宿主机上，初始化页面的 MySQL 主机建议填写：
+如果 MySQL 在宿主机上，初始化页里的 MySQL 主机建议填：
 
 ```text
 host.docker.internal
 ```
 
-如果你的服务器 Docker 不支持这个名字，请填写宿主机内网 IP，或保留上面 `docker run` 里的：
+如果你的 Linux Docker 不支持这个名字，请保留 `docker run` 里的：
 
 ```bash
 --add-host=host.docker.internal:host-gateway
 ```
 
-安装程序也会自动尝试 Docker 网关地址，例如容器默认网关、`172.17.0.1`、`172.18.0.1`。
+也可以改填宿主机内网 IP。
 
-`.env` 建议不要给值加引号，特别是 Docker `env_file` 或 `--env-file` 部署时：
+## 自动采集
 
-```env
-ADMIN_PATH=/manage-8f3k2
-ADMIN_USER=admin
-ADMIN_PASSWORD=ChangeMe_2026_admin
-ADMIN_INTERNAL_TOKEN=ChangeMe_Internal_Admin_2026
-ADMIN_COOKIE_SECURE=false
-INSTALL_TOKEN=ChangeMe_Install_2026
+worker 会等待数据库初始化完成，然后按 `FETCH_INTERVAL_MINUTES` 定时执行采集。
+
+默认会执行两类任务：
+
+```text
+热点导入：Google Trends -> GDELT 相关新闻 -> 自动生成 SEO 新闻页
+RSS 导入：RSS 来源 -> 文章标题/摘要/图片/来源链接 -> 自动生成 SEO 新闻页
 ```
 
-本地或直接用 `http://服务器IP:3000` 测试时，`ADMIN_COOKIE_SECURE` 必须保持 `false`，否则浏览器不会保存登录 Cookie。正式 HTTPS 反代上线后可以改成 `true`。
+RSS 自动导入开关：
+
+```env
+ENABLE_RSS_IMPORT=true
+MAX_ITEMS_PER_SOURCE=12
+FETCH_INTERVAL_MINUTES=30
+```
+
+如果只想手动导入，可以把 `ENABLE_RSS_IMPORT=false`。
+
+## 后台手动导入
+
+后台可以直接操作：
+
+```text
+/manage-8f3k2/hot-topics  点击“立即导入热点”
+/manage-8f3k2/sources     点击“立即导入 RSS 文章”
+```
+
+Docker 镜像部署时，命令要在容器里执行，不要在服务器 `/home` 目录直接跑 `npm run`：
+
+```bash
+docker exec news npm run import:hot-news
+docker exec news npm run import:feeds
+```
+
+如果使用 `docker compose`：
+
+```bash
+docker compose exec web npm run import:hot-news
+docker compose exec web npm run import:feeds
+```
+
+只有源码开发环境才直接运行：
+
+```bash
+npm run import:hot-news
+npm run import:feeds
+```
+
+## SEO 输出
+
+新增文章后会自动进入：
+
+```text
+首页新闻流
+文章详情页
+/sitemap.xml
+/sitemap-news.xml
+/rss.xml
+Open Graph / Twitter Card metadata
+```
+
+RSS 来源通常不会提供完整原文，所以系统默认导入标题、摘要、图片、发布时间、来源链接，并尝试从原文页读取 `og:image`、标题、描述和 canonical。为避免版权风险，不会整篇复制第三方原文。
 
 ## 本地开发
 
@@ -117,26 +139,8 @@ npm install
 npm run dev
 ```
 
-## 热点导入
-
-后台可以直接进入“热点词”页面点击“立即导入热点”。
-
-如果使用 Docker 镜像运行，命令要在容器里执行，不要在服务器 `/home` 目录直接运行：
+构建验证：
 
 ```bash
-docker exec news npm run import:hot-news
+npm run build
 ```
-
-如果使用 `docker compose`：
-
-```bash
-docker compose exec web npm run import:hot-news
-```
-
-源码开发环境才直接运行：
-
-```bash
-npm run import:hot-news
-```
-
-worker 容器会自动等待数据库初始化完成，然后开始按计划导入热点。
