@@ -29,12 +29,25 @@ function safeIsoDate(value: Date | string | null | undefined) {
   return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
 }
 
-function publicArticleFilter(alias = "a") {
-  return `NOT EXISTS (
-    SELECT 1
-    FROM hot_topics hidden_topic
-    WHERE hidden_topic.article_id = ${alias}.id
-  )`;
+function publicArticleFilter(alias = "a", translationAlias = "t", sourceAlias = "s") {
+  const title = `LOWER(TRIM(COALESCE(${translationAlias}.title, '')))`;
+  const generatedText = `LOWER(CONCAT_WS(' ', COALESCE(${translationAlias}.description, ''), COALESCE(${translationAlias}.summary, ''), COALESCE(${translationAlias}.content_html, '')))`;
+
+  return `
+    NOT EXISTS (
+      SELECT 1
+      FROM hot_topics hidden_topic
+      WHERE hidden_topic.article_id = ${alias}.id
+    )
+    AND ${title} NOT REGEXP '^google news( |$)'
+    AND NOT (
+      ${sourceAlias}.source_type = 'hot_trends'
+      AND (
+        ${generatedText} REGEXP 'is related to the current|is part of the latest coverage on|adds context to the wider|this story is linked with recent coverage|current [[:alnum:] _-]+ trend|hot search signal|automated trend briefing|latest news signals'
+        OR ${title} IN ('google news', 'news')
+      )
+    )
+  `;
 }
 
 function placeholderImageUrl(row: ArticleRow) {
@@ -106,6 +119,10 @@ function cleanGeneratedDescription(input: string | null, title: string, content:
     return `Latest coverage on ${topic}.`;
   }
 
+  if (/is related to the current|is part of the latest coverage on|adds context to the wider|This story is linked with recent coverage/i.test(text)) {
+    return truncate(stripHtml(content), 155);
+  }
+
   return text || truncate(stripHtml(content), 155);
 }
 
@@ -113,7 +130,7 @@ function cleanGeneratedSummary(input: string | null, title: string, content: str
   const text = String(input || "").trim();
   const topic = title.replace(/:\s*latest updates$/i, "");
 
-  if (/current search trend|hot search signal|latest news signals/i.test(text)) {
+  if (/current search trend|hot search signal|latest news signals|is related to the current|adds context to the wider/i.test(text)) {
     return `${topic} is part of the latest news cycle.`;
   }
 

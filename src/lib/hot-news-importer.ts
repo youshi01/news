@@ -427,24 +427,55 @@ function cleanArticleDescription(input: string | null | undefined, title = "", s
     .trim();
   const cleanTitle = stripHtml(title).replace(/\s+/g, " ").trim();
   const cleanSource = stripHtml(sourceName).replace(/\s+/g, " ").trim();
+  const lowerText = text.toLowerCase();
+  const lowerTitle = cleanTitle.toLowerCase();
+  const lowerSource = cleanSource.toLowerCase();
 
   if (!text || text.length < 45) {
     return null;
   }
 
-  if (cleanTitle && text.toLowerCase() === cleanTitle.toLowerCase()) {
+  if (cleanTitle && lowerText === lowerTitle) {
     return null;
   }
 
-  if (cleanSource && text.toLowerCase() === cleanSource.toLowerCase()) {
+  if (cleanSource && lowerText === lowerSource) {
     return null;
   }
 
-  if (/google news|comprehensive up-to-date news coverage/i.test(text)) {
+  if (
+    cleanTitle &&
+    lowerText.startsWith(lowerTitle) &&
+    (!cleanSource || lowerText.endsWith(lowerSource)) &&
+    text.length <= cleanTitle.length + cleanSource.length + 12
+  ) {
+    return null;
+  }
+
+  if (/google news|comprehensive up-to-date news coverage|is related to the current|adds context to the wider|latest coverage on/i.test(text)) {
     return null;
   }
 
   return truncate(text, 900);
+}
+
+function isUsableArticleTitle(input: string | null | undefined, sourceName = "") {
+  const title = stripHtml(input || "").replace(/\s+/g, " ").trim();
+  const source = stripHtml(sourceName || "").replace(/\s+/g, " ").trim();
+
+  if (title.length < 12 || title.length > 220) {
+    return false;
+  }
+
+  if (/^google news\b/i.test(title)) {
+    return false;
+  }
+
+  if (source && title.toLowerCase() === source.toLowerCase()) {
+    return false;
+  }
+
+  return true;
 }
 
 async function upsertMediaAsset(
@@ -558,11 +589,18 @@ async function getGoogleNewsArticles(topic: string, market: MarketConfig) {
           fetchMetadata && index < metadataLimit
             ? await fetchArticleMetadata(link)
             : emptyArticleMetadata();
+        const resolvedToPublisher =
+          Boolean(metadata.canonicalUrl) && !isGoogleNewsUrl(metadata.canonicalUrl || "");
         const articleUrl =
-          metadata.canonicalUrl && !isGoogleNewsUrl(metadata.canonicalUrl)
+          resolvedToPublisher && metadata.canonicalUrl
             ? metadata.canonicalUrl
             : link;
-        const title = cleanNewsTitle(metadata.title || item.title || "", sourceName);
+        const feedTitle = cleanNewsTitle(item.title || "", sourceName);
+        const metadataTitle =
+          resolvedToPublisher && isUsableArticleTitle(metadata.title, sourceName)
+            ? metadata.title
+            : null;
+        const title = cleanNewsTitle(metadataTitle || feedTitle, sourceName);
         const feedDescription = cleanArticleDescription(
           item.contentSnippet || item.content,
           title,
@@ -570,13 +608,16 @@ async function getGoogleNewsArticles(topic: string, market: MarketConfig) {
         );
         const imageUrl =
           normalizeImageUrl(newsFeedImage(item), articleUrl) ||
-          normalizeImageUrl(metadata.imageUrl, articleUrl) ||
+          (resolvedToPublisher ? normalizeImageUrl(metadata.imageUrl, articleUrl) : null) ||
           undefined;
 
         return {
           url: articleUrl,
           title,
-          description: metadata.description || feedDescription || undefined,
+          description:
+            (resolvedToPublisher ? metadata.description : null) ||
+            feedDescription ||
+            undefined,
           seendate: metadata.publishedAt || item.isoDate || item.pubDate,
           socialimage: imageUrl,
           domain: sourceName || hostname(articleUrl),
@@ -599,7 +640,7 @@ function mergeRelatedArticles(articles: RelatedArticle[], limit: number) {
 
   for (const article of articles) {
     const key = article.url || article.title.toLowerCase();
-    if (!article.title || !article.url || seen.has(key)) {
+    if (!isUsableArticleTitle(article.title, article.sourceName || article.domain) || !article.url || seen.has(key)) {
       continue;
     }
 
