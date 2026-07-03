@@ -5,7 +5,6 @@ import { AdSlot } from "@/components/AdSlot";
 import { ArticleCard } from "@/components/ArticleCard";
 import { NewsImage } from "@/components/NewsImage";
 import { getArticleBySlug, getArticles } from "@/lib/data";
-import { formatDateTime } from "@/lib/date-format";
 import { normalizeLocale, SUPPORTED_LOCALES } from "@/lib/locales";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 
@@ -94,19 +93,6 @@ export default async function ArticlePage({
           <div className="kicker">{article.categorySlug}</div>
           <h1>{article.title}</h1>
           <p className="article-description">{article.description}</p>
-          <div className="source-row">
-            <span>{article.sourceName}</span>
-            <span>{article.readingMinutes} min read</span>
-            <time dateTime={article.publishedAt}>
-              {formatDateTime(article.publishedAt, {
-                month: "long",
-                day: "numeric",
-                year: "numeric",
-                hour: "2-digit",
-                minute: "2-digit"
-              })}
-            </time>
-          </div>
         </header>
         <AdSlot placement="article_after_title" />
         <div className="article-hero-image">

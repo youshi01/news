@@ -17,7 +17,7 @@ export function TrendRail({ articles }: TrendRailProps) {
           <li key={article.slug}>
             <Link href={`/${article.locale}/news/${article.slug}`}>
               <strong>{article.title}</strong>
-              <span>{article.categorySlug} / Heat {article.heatScore}</span>
+              <span>{article.categorySlug}</span>
             </Link>
           </li>
         ))}

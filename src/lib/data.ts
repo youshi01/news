@@ -63,6 +63,12 @@ function sourceName(row: ArticleRow) {
 
 function stripGeneratedSourceBlocks(input: string) {
   return input
+    .replace(
+      /<p>\s*<strong>([\s\S]*?)<\/strong>\s+is currently appearing as a hot search signal[\s\S]*?<\/p>/gi,
+      (_match, topic) =>
+        `<p><strong>${topic}</strong> is drawing new coverage. This page summarizes the latest context for quick follow-up.</p>`
+    )
+    .replace(/<p>\s*<strong>\s*Why it matters\s*:\s*<\/strong>\s*Hot search demand[\s\S]*?<\/p>/gi, "")
     .replace(/<h2>\s*Source links\s*<\/h2>\s*<ul>[\s\S]*?<\/ul>/gi, "")
     .replace(/<p>\s*<strong>\s*Sources?\s*:\s*<\/strong>[\s\S]*?<\/p>/gi, "")
     .replace(
@@ -74,18 +80,53 @@ function stripGeneratedSourceBlocks(input: string) {
     .trim();
 }
 
+function cleanGeneratedTitle(input: string) {
+  return input
+    .replace(/^(.+?):\s*why it is trending in .+$/i, "$1: latest updates")
+    .trim();
+}
+
+function cleanGeneratedDescription(input: string | null, title: string, content: string) {
+  const text = String(input || "").trim();
+  const topic = title.replace(/:\s*latest updates$/i, "");
+
+  if (/is trending in .+This briefing tracks the latest signals/i.test(text)) {
+    return `Latest coverage on ${topic}.`;
+  }
+
+  if (/hot search signal|estimated search interest|automated trend briefing/i.test(text)) {
+    return `Latest coverage on ${topic}.`;
+  }
+
+  return text || truncate(stripHtml(content), 155);
+}
+
+function cleanGeneratedSummary(input: string | null, title: string, content: string) {
+  const text = String(input || "").trim();
+  const topic = title.replace(/:\s*latest updates$/i, "");
+
+  if (/current search trend|hot search signal|latest news signals/i.test(text)) {
+    return `${topic} is part of the latest news cycle.`;
+  }
+
+  return text || truncate(stripHtml(content), 220);
+}
+
 function mapArticle(row: ArticleRow): NewsArticle {
+  const title = cleanGeneratedTitle(row.title);
   const content = stripGeneratedSourceBlocks(
     row.content_html || row.summary || row.description || ""
   );
+  const description = cleanGeneratedDescription(row.description, title, content);
+  const summary = cleanGeneratedSummary(row.summary, title, content);
 
   return {
     id: Number(row.id),
     locale: row.locale,
     slug: row.slug,
-    title: row.title,
-    description: row.description || truncate(stripHtml(content), 155),
-    summary: row.summary || truncate(stripHtml(content), 220),
+    title,
+    description,
+    summary,
     contentHtml: content || `<p>${row.summary || row.description}</p>`,
     mediaAssetId: row.media_asset_id ? Number(row.media_asset_id) : null,
     imageUrl: articleImageUrl(row),

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { formatDateTime } from "@/lib/date-format";
 import type { NewsArticle } from "@/lib/types";
 import { NewsImage } from "@/components/NewsImage";
 
@@ -25,18 +24,6 @@ export function HeroStory({ article }: HeroStoryProps) {
           <Link href={`/${article.locale}/news/${article.slug}`}>{article.title}</Link>
         </h1>
         <p>{article.description}</p>
-        <div className="source-row">
-          <span>{article.sourceName}</span>
-          <span>Heat {article.heatScore}</span>
-          <time dateTime={article.publishedAt}>
-            {formatDateTime(article.publishedAt, {
-              month: "long",
-              day: "numeric",
-              hour: "2-digit",
-              minute: "2-digit"
-            })}
-          </time>
-        </div>
       </div>
     </article>
   );

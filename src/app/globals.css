@@ -271,7 +271,6 @@ img {
 
 .kicker,
 .meta-row,
-.source-row,
 .section-heading span {
   color: var(--accent);
   font-family: Arial, sans-serif;
@@ -292,13 +291,6 @@ img {
   font-size: 19px;
   line-height: 1.48;
   margin: 0 0 18px;
-}
-
-.source-row {
-  color: var(--muted);
-  display: flex;
-  flex-wrap: wrap;
-  gap: 11px;
 }
 
 .content-column {
