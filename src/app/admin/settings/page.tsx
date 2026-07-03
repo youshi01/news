@@ -130,7 +130,7 @@ export default async function AdminSettingsPage({
           <p>当前 worker 的主要方向：</p>
           <ul>
             <li>按东南亚市场抓取 Google Trends 热点</li>
-            <li>通过 Google News RSS 抓取相关新闻，GDELT 作为补充</li>
+            <li>通过 Google News RSS 抓取相关新闻，GDELT 可作为慢速补充</li>
             <li>自动生成 SEO 新闻页面</li>
             <li>广告位先预留，等流量起来后开启</li>
           </ul>

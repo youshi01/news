@@ -2,7 +2,12 @@ import { AdminNav } from "@/components/AdminNav";
 import { localeLabel, sourceTypeLabel } from "@/lib/admin-labels";
 import { getAdminSources } from "@/lib/admin-data";
 import { requireAdminPageSession } from "@/lib/admin-page-auth";
-import { addSourceAction, deleteSourceAction, importFeedsAction } from "./actions";
+import {
+  addSourceAction,
+  deleteSourceAction,
+  importFeedsAction,
+  importSelectedSourcesAction
+} from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -31,6 +36,11 @@ export default async function AdminSourcesPage({
       {importStatus.import === "done" && (
         <div className="settings-success">
           RSS 文章导入已执行。新文章会自动进入文章列表、首页、sitemap 和 RSS 输出。
+        </div>
+      )}
+      {importStatus.import === "selected" && (
+        <div className="settings-success">
+          已导入选中的 RSS 来源。
         </div>
       )}
       {importStatus.import === "failed" && (
@@ -101,9 +111,19 @@ export default async function AdminSourcesPage({
             <h2>{sources.length} 个来源</h2>
             <span>已启用来源会参与自动采集</span>
           </div>
-          <ul className="data-list admin-table-list">
+          <form id="source-bulk-form" className="bulk-actions" action={importSelectedSourcesAction}>
+            <button className="text-button" type="submit">导入选中来源</button>
+          </form>
+          <ul className="data-list admin-table-list selectable-list source-list">
             {sources.map((source) => (
               <li key={source.id}>
+                <input
+                  aria-label={`选择 ${source.name}`}
+                  form="source-bulk-form"
+                  name="ids"
+                  type="checkbox"
+                  value={source.id}
+                />
                 <span>
                   <strong>{source.name}</strong>
                   <br />
@@ -128,13 +148,15 @@ export default async function AdminSourcesPage({
                     : "未采集"}
                 </span>
                 <span>{source.failureCount} 次失败</span>
-                <a className="text-button" href={source.siteUrl} target="_blank" rel="noreferrer">
-                  访问
-                </a>
-                <form action={deleteSourceAction}>
-                  <input type="hidden" name="id" value={source.id} />
-                  <button className="text-button danger-button" type="submit">删除</button>
-                </form>
+                <span className="row-actions">
+                  <a className="text-button" href={source.siteUrl} target="_blank" rel="noreferrer">
+                    访问
+                  </a>
+                  <form action={deleteSourceAction}>
+                    <input type="hidden" name="id" value={source.id} />
+                    <button className="text-button danger-button" type="submit">删除</button>
+                  </form>
+                </span>
               </li>
             ))}
           </ul>

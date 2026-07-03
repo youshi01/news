@@ -27,6 +27,14 @@ function cleanHeatScore(value: FormDataEntryValue | null) {
   return Math.max(0, Math.min(100, Math.round(score)));
 }
 
+function selectedIds(formData: FormData) {
+  return formData
+    .getAll("ids")
+    .map((value) => Number(cleanText(value, 30)))
+    .filter((id) => Number.isInteger(id) && id > 0)
+    .slice(0, 30);
+}
+
 export async function importHotNewsAction() {
   await requireAdminPageSession();
 
@@ -90,6 +98,29 @@ export async function importHotTopicNewsAction(formData: FormData) {
   }
 
   redirect(adminHref("/hot-topics?topic=imported"));
+}
+
+export async function importSelectedHotTopicsAction(formData: FormData) {
+  await requireAdminPageSession();
+
+  const ids = selectedIds(formData);
+
+  if (!ids.length) {
+    redirect(adminHref("/hot-topics?topic=failed&detail=请先勾选热点词"));
+  }
+
+  try {
+    for (const id of ids) {
+      await importHotTopicById(id);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    redirect(
+      adminHref(`/hot-topics?topic=failed&detail=${encodeURIComponent(message.slice(0, 180))}`)
+    );
+  }
+
+  redirect(adminHref("/hot-topics?topic=selected"));
 }
 
 export async function deleteHotTopicAction(formData: FormData) {

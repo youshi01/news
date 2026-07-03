@@ -34,6 +34,35 @@ export async function importFeedsAction() {
   redirect(adminHref("/sources?import=done"));
 }
 
+function selectedIds(formData: FormData) {
+  return formData
+    .getAll("ids")
+    .map((value) => Number(cleanText(value, 30)))
+    .filter((id) => Number.isInteger(id) && id > 0)
+    .slice(0, 50);
+}
+
+export async function importSelectedSourcesAction(formData: FormData) {
+  await requireAdminPageSession();
+
+  const ids = selectedIds(formData);
+
+  if (!ids.length) {
+    redirect(adminHref("/sources?source=failed&detail=请先勾选来源"));
+  }
+
+  try {
+    await importFeeds({ sourceIds: ids });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    redirect(
+      adminHref(`/sources?import=failed&detail=${encodeURIComponent(message.slice(0, 180))}`)
+    );
+  }
+
+  redirect(adminHref("/sources?import=selected"));
+}
+
 export async function addSourceAction(formData: FormData) {
   await requireAdminPageSession();
 

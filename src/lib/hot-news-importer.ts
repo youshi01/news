@@ -862,7 +862,7 @@ async function processHotTopic(
 export async function importHotNews() {
   const connection = await mysql.createConnection(getDatabaseUrl());
   const markets = enabledMarkets();
-  let relatedLookupsRemaining = Number(getEnv("HOT_NEWS_RELATED_LOOKUPS_PER_RUN", "6"));
+  let relatedLookupsRemaining = Number(getEnv("HOT_NEWS_RELATED_LOOKUPS_PER_RUN", "0"));
   const [task] = await connection.execute<mysql.ResultSetHeader>(
     `
       INSERT INTO import_tasks (task_type, status, started_at)
@@ -973,7 +973,7 @@ export async function importManualHotTopic(input: {
       },
       {
         provider: "manual",
-        includeGdelt: true,
+        includeGdelt: false,
         heatScore: input.heatScore
       }
     );
@@ -1050,7 +1050,7 @@ export async function importHotTopicById(id: number) {
       },
       {
         provider: String(row.provider || "manual"),
-        includeGdelt: true,
+        includeGdelt: false,
         heatScore: Number(row.heat_score || 0) || undefined
       }
     );

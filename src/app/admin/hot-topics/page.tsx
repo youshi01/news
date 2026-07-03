@@ -7,7 +7,8 @@ import {
   addHotTopicAction,
   deleteHotTopicAction,
   importHotNewsAction,
-  importHotTopicNewsAction
+  importHotTopicNewsAction,
+  importSelectedHotTopicsAction
 } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -55,6 +56,11 @@ export default async function AdminHotTopicsPage({
           已重新抓取这个热点词的相关新闻。
         </div>
       )}
+      {importStatus.topic === "selected" && (
+        <div className="settings-success">
+          已抓取选中热点词的相关新闻。
+        </div>
+      )}
       {importStatus.topic === "deleted" && (
         <div className="settings-success">
           热点词已删除。已经生成的文章会保留。
@@ -99,9 +105,19 @@ export default async function AdminHotTopicsPage({
       {topics.length ? (
         <section className="admin-card">
           <p>{topics.length} 个热点</p>
-          <ul className="data-list">
+          <form id="hot-topic-bulk-form" className="bulk-actions" action={importSelectedHotTopicsAction}>
+            <button className="text-button" type="submit">抓取选中新闻</button>
+          </form>
+          <ul className="data-list selectable-list hot-topic-list">
             {topics.map((topic) => (
               <li key={topic.id}>
+                <input
+                  aria-label={`选择 ${topic.topic}`}
+                  form="hot-topic-bulk-form"
+                  name="ids"
+                  type="checkbox"
+                  value={topic.id}
+                />
                 <span>
                   <strong>{topic.topic}</strong>
                   <br />

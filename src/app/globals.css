@@ -624,6 +624,25 @@ img {
   padding-bottom: 10px;
 }
 
+.bulk-actions {
+  display: flex;
+  gap: 10px;
+  margin: 10px 0 16px;
+}
+
+.selectable-list input[type="checkbox"] {
+  height: 18px;
+  width: 18px;
+}
+
+.hot-topic-list li {
+  grid-template-columns: 32px minmax(0, 1fr) auto auto;
+}
+
+.source-list li {
+  grid-template-columns: 32px minmax(0, 1fr) auto auto auto;
+}
+
 .admin-table-list small {
   color: var(--muted);
   font-family: Arial, sans-serif;
@@ -812,7 +831,8 @@ img {
   padding: 10px;
 }
 
-.media-card img {
+.media-card img,
+.media-card video {
   aspect-ratio: 4 / 3;
   background: var(--line);
   object-fit: cover;
@@ -1026,6 +1046,11 @@ img {
 
   .data-list li {
     align-items: start;
+    grid-template-columns: 1fr;
+  }
+
+  .hot-topic-list li,
+  .source-list li {
     grid-template-columns: 1fr;
   }
 

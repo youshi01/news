@@ -85,6 +85,7 @@ MAX_ITEMS_PER_SOURCE=12
 FETCH_INTERVAL_MINUTES=30
 HOT_NEWS_GOOGLE_NEWS_ENABLED=true
 HOT_NEWS_ARTICLES_PER_TOPIC=6
+HOT_NEWS_RELATED_LOOKUPS_PER_RUN=0
 ```
 
 如果只想手动导入，可以把 `ENABLE_RSS_IMPORT=false`。
@@ -133,6 +134,8 @@ Open Graph / Twitter Card metadata
 ```
 
 RSS 来源通常不会提供完整原文，所以系统默认导入标题、摘要、图片、发布时间、来源链接，并尝试从原文页读取 `og:image`、标题、描述和 canonical。为避免版权风险，不会整篇复制第三方原文。
+
+媒体库会统一记录图片和视频资源。视频来自 RSS enclosure、`media:content` 或原文页 metadata，后台只预加载 metadata，避免打开媒体库时拖慢页面。
 
 ## 本地开发
 

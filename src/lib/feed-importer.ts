@@ -18,11 +18,14 @@ type SourceRow = {
 type CustomFeedItem = Parser.Item & {
   enclosure?: {
     url?: string;
+    type?: string;
   };
   "content:encoded"?: string;
   "media:content"?: {
     $?: {
       url?: string;
+      type?: string;
+      medium?: string;
     };
   };
   "media:thumbnail"?: {
@@ -37,6 +40,7 @@ type ArticleMetadata = {
   title: string | null;
   description: string | null;
   imageUrl: string | null;
+  videoUrl: string | null;
   publishedAt: string | null;
 };
 
@@ -96,11 +100,44 @@ function getDatabaseUrl() {
 }
 
 function getFeedImage(item: CustomFeedItem) {
+  if (isImageAsset(item.enclosure?.url, item.enclosure?.type)) {
+    return item.enclosure?.url || null;
+  }
+
+  const media = item["media:content"]?.$;
+  if (isImageAsset(media?.url, media?.type, media?.medium)) {
+    return media?.url || null;
+  }
+
+  return item["media:thumbnail"]?.$?.url || null;
+}
+
+function getFeedVideo(item: CustomFeedItem) {
+  if (isVideoAsset(item.enclosure?.url, item.enclosure?.type)) {
+    return item.enclosure?.url || null;
+  }
+
+  const media = item["media:content"]?.$;
+  if (isVideoAsset(media?.url, media?.type, media?.medium)) {
+    return media?.url || null;
+  }
+
+  return null;
+}
+
+function isImageAsset(url?: string, type?: string, medium?: string) {
+  const value = `${type || ""} ${medium || ""} ${url || ""}`.toLowerCase();
   return (
-    item.enclosure?.url ||
-    item["media:content"]?.$?.url ||
-    item["media:thumbnail"]?.$?.url ||
-    null
+    value.includes("image") ||
+    /\.(avif|gif|jpe?g|png|webp)(\?|#|$)/i.test(url || "")
+  );
+}
+
+function isVideoAsset(url?: string, type?: string, medium?: string) {
+  const value = `${type || ""} ${medium || ""} ${url || ""}`.toLowerCase();
+  return (
+    value.includes("video") ||
+    /\.(m3u8|mov|mp4|mpe?g|webm)(\?|#|$)/i.test(url || "")
   );
 }
 
@@ -213,6 +250,12 @@ async function fetchArticleMetadata(articleUrl: string): Promise<ArticleMetadata
       "description"
     ]);
     const imageUrl = getMetaContent(html, ["og:image", "twitter:image", "image"]);
+    const videoUrl = getMetaContent(html, [
+      "og:video",
+      "og:video:url",
+      "og:video:secure_url",
+      "twitter:player:stream"
+    ]);
     const title = getMetaContent(html, ["og:title", "twitter:title"]) || getTitleTag(html);
     const publishedAt = getMetaContent(html, [
       "article:published_time",
@@ -226,6 +269,7 @@ async function fetchArticleMetadata(articleUrl: string): Promise<ArticleMetadata
       title,
       description,
       imageUrl: normalizeUrl(imageUrl, finalUrl),
+      videoUrl: normalizeUrl(videoUrl, finalUrl),
       publishedAt
     };
   } catch {
@@ -241,6 +285,7 @@ function emptyMetadata(): ArticleMetadata {
     title: null,
     description: null,
     imageUrl: null,
+    videoUrl: null,
     publishedAt: null
   };
 }
@@ -248,7 +293,8 @@ function emptyMetadata(): ArticleMetadata {
 async function upsertMediaAsset(
   connection: mysql.Connection,
   imageUrl: string,
-  sourceUrl: string
+  sourceUrl: string,
+  assetType: "image" | "video" = "image"
 ) {
   const urlHash = sha256(imageUrl);
 
@@ -256,9 +302,9 @@ async function upsertMediaAsset(
     `
       INSERT IGNORE INTO media_assets
         (original_url, url_hash, source_url, asset_type, storage_type, status)
-      VALUES (?, ?, ?, 'image', 'remote_proxy', 'active')
+      VALUES (?, ?, ?, ?, 'remote_proxy', 'active')
     `,
-    [imageUrl, urlHash, sourceUrl]
+    [imageUrl, urlHash, sourceUrl, assetType]
   );
 
   const [rows] = await connection.execute<mysql.RowDataPacket[]>(
@@ -290,17 +336,29 @@ function toValidDate(input: string | null | undefined) {
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
-async function getSources(connection: mysql.Connection) {
+async function getSources(connection: mysql.Connection, sourceIds: number[] = []) {
+  const selectedIds = sourceIds
+    .map((id) => Number(id))
+    .filter((id) => Number.isInteger(id) && id > 0);
+  const selectedClause = selectedIds.length
+    ? `AND id IN (${selectedIds.map(() => "?").join(",")})`
+    : "";
   const [rows] = await connection.query<mysql.RowDataPacket[]>(
     `
       SELECT id, name, site_url, rss_url, default_locale, category_slug
       FROM sources
       WHERE enabled = 1 AND rss_url IS NOT NULL
+      ${selectedClause}
       ORDER BY last_fetched_at IS NULL DESC, last_fetched_at ASC
-    `
+    `,
+    selectedIds
   );
 
-  return rows.length ? (rows as SourceRow[]) : defaultSources;
+  if (rows.length) {
+    return rows as SourceRow[];
+  }
+
+  return selectedIds.length ? [] : defaultSources;
 }
 
 async function insertArticle(
@@ -321,9 +379,15 @@ async function insertArticle(
   const feedSummary = item.contentSnippet || item.summary || item["content:encoded"] || item.content || "";
   const summary = stripHtml(metadata.description || feedSummary || title);
   const imageUrl = normalizeUrl(getFeedImage(item), link) || metadata.imageUrl;
+  const videoUrl = normalizeUrl(getFeedVideo(item), link) || metadata.videoUrl;
   const mediaAssetId = imageUrl
     ? await upsertMediaAsset(connection, imageUrl, canonicalUrl)
     : null;
+
+  if (videoUrl) {
+    await upsertMediaAsset(connection, videoUrl, canonicalUrl, "video");
+  }
+
   const publishedAt =
     metadata.publishedAt ||
     item.isoDate ||
@@ -520,11 +584,11 @@ async function importSource(connection: mysql.Connection, source: SourceRow) {
   }
 }
 
-export async function importFeeds() {
+export async function importFeeds(options: { sourceIds?: number[] } = {}) {
   const connection = await mysql.createConnection(getDatabaseUrl());
 
   try {
-    const sources = await getSources(connection);
+    const sources = await getSources(connection, options.sourceIds || []);
 
     for (const source of sources) {
       await importSource(connection, source);
