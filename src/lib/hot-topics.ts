@@ -50,6 +50,11 @@ export async function getHotTopics(limit = 80) {
             SELECT t2.locale
             FROM article_translations t2
             WHERE t2.article_id = h.article_id
+              AND NOT EXISTS (
+                SELECT 1
+                FROM hot_topics hidden_topic
+                WHERE hidden_topic.article_id = h.article_id
+              )
             ORDER BY t2.locale = 'en' DESC, t2.id ASC
             LIMIT 1
           )
@@ -60,13 +65,24 @@ export async function getHotTopics(limit = 80) {
             SELECT t2.slug
             FROM article_translations t2
             WHERE t2.article_id = h.article_id
+              AND NOT EXISTS (
+                SELECT 1
+                FROM hot_topics hidden_topic
+                WHERE hidden_topic.article_id = h.article_id
+              )
             ORDER BY t2.locale = 'en' DESC, t2.id ASC
             LIMIT 1
           )
         ) AS article_slug
       FROM hot_topics h
       LEFT JOIN article_translations t
-        ON t.article_id = h.article_id AND t.locale = h.locale
+        ON t.article_id = h.article_id
+        AND t.locale = h.locale
+        AND NOT EXISTS (
+          SELECT 1
+          FROM hot_topics hidden_topic
+          WHERE hidden_topic.article_id = h.article_id
+        )
       ORDER BY h.last_seen_at DESC, h.heat_score DESC
       LIMIT ?
     `,

@@ -29,6 +29,14 @@ function safeIsoDate(value: Date | string | null | undefined) {
   return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
 }
 
+function publicArticleFilter(alias = "a") {
+  return `NOT EXISTS (
+    SELECT 1
+    FROM hot_topics hidden_topic
+    WHERE hidden_topic.article_id = ${alias}.id
+  )`;
+}
+
 function placeholderImageUrl(row: ArticleRow) {
   const params = new URLSearchParams({
     title: row.title || row.category_slug || "News",
@@ -72,7 +80,7 @@ function stripGeneratedSourceBlocks(input: string) {
     .replace(/<h2>\s*Source links\s*<\/h2>\s*<ul>[\s\S]*?<\/ul>/gi, "")
     .replace(/<p>\s*<strong>\s*Sources?\s*:\s*<\/strong>[\s\S]*?<\/p>/gi, "")
     .replace(
-      /<p>\s*<strong>\s*Editorial note\s*:\s*<\/strong>[\s\S]*?(?:automated briefing|rss signal|original publisher|original source|source links)[\s\S]*?<\/p>/gi,
+      /<p>\s*<strong>\s*Editorial note\s*:\s*<\/strong>[\s\S]*?(?:automated briefing|automated trend briefing|rss signal|original publisher|original source|source links)[\s\S]*?<\/p>/gi,
       ""
     )
     .replace(/<p>\s*This automated briefing[\s\S]*?<\/p>/gi, "")
@@ -165,6 +173,7 @@ export async function getArticles(localeParam?: string, limit = 12) {
       LEFT JOIN sources s ON s.id = a.source_id
       LEFT JOIN media_assets ma ON ma.id = a.media_asset_id
       WHERE t.locale = ? AND a.status = 'published'
+        AND ${publicArticleFilter("a")}
       ORDER BY COALESCE(a.published_at, a.imported_at) DESC, a.id DESC
       LIMIT ?
     `,
@@ -204,6 +213,7 @@ export async function getTrendingArticles(localeParam?: string, limit = 8) {
       LEFT JOIN sources s ON s.id = a.source_id
       LEFT JOIN media_assets ma ON ma.id = a.media_asset_id
       WHERE t.locale = ? AND a.status = 'published'
+        AND ${publicArticleFilter("a")}
       ORDER BY a.heat_score DESC, COALESCE(a.published_at, a.imported_at) DESC
       LIMIT ?
     `,
@@ -246,6 +256,7 @@ export async function getArticleBySlug(localeParam: string, slug: string) {
       LEFT JOIN sources s ON s.id = a.source_id
       LEFT JOIN media_assets ma ON ma.id = a.media_asset_id
       WHERE t.locale = ? AND t.slug = ? AND a.status = 'published'
+        AND ${publicArticleFilter("a")}
       LIMIT 1
     `,
     [locale, slug]
@@ -275,6 +286,7 @@ export async function getAllArticleUrls() {
       FROM article_translations t
       INNER JOIN articles a ON a.id = t.article_id
       WHERE a.status = 'published'
+        AND ${publicArticleFilter("a")}
       ORDER BY t.updated_at DESC
       LIMIT 50000
     `

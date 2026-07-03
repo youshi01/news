@@ -19,6 +19,7 @@ type TrendItem = Parser.Item & {
 type RelatedArticle = {
   url: string;
   title: string;
+  description?: string;
   seendate?: string;
   socialimage?: string;
   domain?: string;
@@ -30,12 +31,15 @@ type RelatedArticle = {
 type ArticleMetadata = {
   canonicalUrl: string | null;
   title: string | null;
+  description: string | null;
   imageUrl: string | null;
   publishedAt: string | null;
 };
 
 type NewsFeedItem = Parser.Item & {
   source?: string;
+  content?: string;
+  contentSnippet?: string;
   "media:content"?: {
     $?: {
       url?: string;
@@ -269,33 +273,6 @@ function toValidDate(input: string | null | undefined) {
   return Number.isNaN(date.getTime()) ? new Date() : date;
 }
 
-function trendTitle(topic: string, market: MarketConfig) {
-  return `${topic}: latest news roundup in ${market.name}`;
-}
-
-function buildDescription(topic: string, market: MarketConfig, articles: RelatedArticle[]) {
-  const domains = articles
-    .map((article) => article.domain)
-    .filter(Boolean)
-    .slice(0, 3)
-    .join(", ");
-
-  return truncate(
-    `Latest coverage on ${topic} from ${market.name}${domains ? `, including reports from ${domains}` : ""}.`,
-    180
-  );
-}
-
-function buildContent(
-  topic: string,
-  market: MarketConfig
-) {
-  return [
-    `<p><strong>${escapeHtml(topic)}</strong> is drawing new coverage in ${escapeHtml(market.name)}. This page summarizes the latest context for quick follow-up.</p>`,
-    `<p><strong>What to watch:</strong> Track official updates, affected companies or people, regional impact, and whether the story develops beyond the first wave of coverage.</p>`
-  ].join("");
-}
-
 function normalizeImageUrl(imageUrl: string | null | undefined, baseUrl: string) {
   if (!imageUrl) {
     return null;
@@ -370,6 +347,7 @@ function emptyArticleMetadata(): ArticleMetadata {
   return {
     canonicalUrl: null,
     title: null,
+    description: null,
     imageUrl: null,
     publishedAt: null
   };
@@ -415,6 +393,11 @@ async function fetchArticleMetadata(articleUrl: string): Promise<ArticleMetadata
     const html = await response.text();
     const finalUrl = response.url || normalizedUrl;
     const title = getMetaContent(html, ["og:title", "twitter:title"]) || getTitleTag(html);
+    const description = getMetaContent(html, [
+      "og:description",
+      "twitter:description",
+      "description"
+    ]);
     const imageUrl = getMetaContent(html, ["og:image", "twitter:image", "image"]);
     const publishedAt = getMetaContent(html, [
       "article:published_time",
@@ -427,6 +410,7 @@ async function fetchArticleMetadata(articleUrl: string): Promise<ArticleMetadata
     return {
       canonicalUrl: normalizeImageUrl(canonicalUrl, finalUrl),
       title,
+      description: cleanArticleDescription(description, title || ""),
       imageUrl: normalizeImageUrl(imageUrl, finalUrl),
       publishedAt
     };
@@ -435,6 +419,32 @@ async function fetchArticleMetadata(articleUrl: string): Promise<ArticleMetadata
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function cleanArticleDescription(input: string | null | undefined, title = "", sourceName = "") {
+  const text = stripHtml(decodeHtml(input || ""))
+    .replace(/\s+/g, " ")
+    .trim();
+  const cleanTitle = stripHtml(title).replace(/\s+/g, " ").trim();
+  const cleanSource = stripHtml(sourceName).replace(/\s+/g, " ").trim();
+
+  if (!text || text.length < 45) {
+    return null;
+  }
+
+  if (cleanTitle && text.toLowerCase() === cleanTitle.toLowerCase()) {
+    return null;
+  }
+
+  if (cleanSource && text.toLowerCase() === cleanSource.toLowerCase()) {
+    return null;
+  }
+
+  if (/google news|comprehensive up-to-date news coverage/i.test(text)) {
+    return null;
+  }
+
+  return truncate(text, 900);
 }
 
 async function upsertMediaAsset(
@@ -553,6 +563,11 @@ async function getGoogleNewsArticles(topic: string, market: MarketConfig) {
             ? metadata.canonicalUrl
             : link;
         const title = cleanNewsTitle(metadata.title || item.title || "", sourceName);
+        const feedDescription = cleanArticleDescription(
+          item.contentSnippet || item.content,
+          title,
+          sourceName
+        );
         const imageUrl =
           normalizeImageUrl(newsFeedImage(item), articleUrl) ||
           normalizeImageUrl(metadata.imageUrl, articleUrl) ||
@@ -561,6 +576,7 @@ async function getGoogleNewsArticles(topic: string, market: MarketConfig) {
         return {
           url: articleUrl,
           title,
+          description: metadata.description || feedDescription || undefined,
           seendate: metadata.publishedAt || item.isoDate || item.pubDate,
           socialimage: imageUrl,
           domain: sourceName || hostname(articleUrl),
@@ -684,129 +700,6 @@ async function upsertHotTopic(
   };
 }
 
-async function createOrUpdateArticle(
-  connection: mysql.Connection,
-  sourceId: number,
-  hotTopicId: number,
-  market: MarketConfig,
-  topic: string,
-  trendUrl: string,
-  approxTraffic: string | undefined,
-  articles: RelatedArticle[],
-  heatScore: number
-) {
-  const title = trendTitle(topic, market);
-  const description = buildDescription(topic, market, articles);
-  const summary = `${topic} is part of the latest news cycle in ${market.name}.`;
-  const contentHtml = buildContent(topic, market);
-  const sourceUrl = articles[0]?.url || trendUrl;
-  const storedSourceUrl = columnUrl(sourceUrl, trendUrl);
-  const imageUrl = normalizeImageUrl(articles.find((article) => article.socialimage)?.socialimage, sourceUrl);
-  const storedImageUrl = imageUrl && imageUrl.length <= ARTICLE_URL_MAX ? imageUrl : null;
-  const mediaAssetId =
-    imageUrl && imageUrl.length <= MEDIA_ORIGINAL_URL_MAX
-      ? await upsertMediaAsset(connection, imageUrl, sourceUrl)
-      : null;
-  const urlHash = sha256(`hot-news:${market.geo}:${topic.toLowerCase()}`);
-  const contentHash = sha256(`${topic}:${articles.map((article) => article.url).join("|")}`);
-  const slug = uniqueSlug(topic, market);
-  const categorySlug = categoryForTopic(topic);
-
-  const [articleResult] = await connection.execute<mysql.ResultSetHeader>(
-    `
-      INSERT INTO articles
-        (
-          source_id,
-          media_asset_id,
-          source_url,
-          canonical_url,
-          url_hash,
-          content_hash,
-          image_url,
-          category_slug,
-          original_language,
-          published_at,
-          status,
-          heat_score
-        )
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 'published', ?)
-      ON DUPLICATE KEY UPDATE
-        media_asset_id = COALESCE(VALUES(media_asset_id), media_asset_id),
-        image_url = COALESCE(VALUES(image_url), image_url),
-        content_hash = VALUES(content_hash),
-        heat_score = GREATEST(heat_score, VALUES(heat_score)),
-        updated_at = CURRENT_TIMESTAMP
-    `,
-    [
-      sourceId,
-      mediaAssetId,
-      storedSourceUrl,
-      storedSourceUrl,
-      urlHash,
-      contentHash,
-      storedImageUrl,
-      categorySlug,
-      market.locale,
-      heatScore
-    ]
-  );
-
-  const articleId = articleResult.insertId || (await findArticleId(connection, urlHash));
-
-  for (const locale of translationLocales(market.locale)) {
-    await connection.execute(
-      `
-        INSERT INTO article_translations
-          (
-            article_id,
-            locale,
-            slug,
-            title,
-            description,
-            summary,
-            content_html,
-            seo_title,
-            seo_description,
-            og_image,
-            translation_status,
-            review_status
-          )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-          title = VALUES(title),
-          description = VALUES(description),
-          summary = VALUES(summary),
-          content_html = VALUES(content_html),
-          seo_title = VALUES(seo_title),
-          seo_description = VALUES(seo_description),
-          og_image = COALESCE(VALUES(og_image), og_image),
-          updated_at = CURRENT_TIMESTAMP
-      `,
-      [
-        articleId,
-        locale,
-        slug,
-        title,
-        description,
-        summary,
-        contentHtml,
-        title,
-        description,
-        storedImageUrl,
-        locale === market.locale ? "done" : "fallback",
-        locale === market.locale ? "auto" : "needs_localization"
-      ]
-    );
-  }
-
-  await connection.execute(
-    "UPDATE hot_topics SET article_id = ? WHERE id = ?",
-    [articleId, hotTopicId]
-  );
-
-  return articleId;
-}
-
 async function createOrUpdateRelatedArticle(
   connection: mysql.Connection,
   sourceId: number,
@@ -822,18 +715,18 @@ async function createOrUpdateRelatedArticle(
     return { processed: false, created: false };
   }
 
-  const description = truncate(
-    `${title} is part of the latest coverage on ${topic} in ${market.name}.`,
-    180
-  );
-  const summary = truncate(
-    `${title} adds context to the wider ${topic} story.`,
-    260
-  );
-  const contentHtml = [
-    `<p>${escapeHtml(summary)}</p>`,
-    `<p>This story is linked with recent coverage around <strong>${escapeHtml(topic)}</strong> in ${escapeHtml(market.name)}.</p>`
-  ].join("");
+  const articleDescription = cleanArticleDescription(article.description, title);
+  const requireDescription = getEnv("HOT_NEWS_REQUIRE_DESCRIPTION", "true") !== "false";
+
+  if (requireDescription && !articleDescription) {
+    return { processed: false, created: false };
+  }
+
+  const description = truncate(articleDescription || title, 180);
+  const summary = truncate(articleDescription || title, 260);
+  const contentHtml = articleDescription
+    ? `<p>${escapeHtml(articleDescription)}</p>`
+    : `<p>${escapeHtml(title)}</p>`;
   const imageUrl = normalizeImageUrl(article.socialimage, sourceUrl);
   const storedSourceUrl = columnUrl(
     sourceUrl,
@@ -1000,16 +893,9 @@ async function processHotTopic(
     options.provider || "google_trends"
   );
 
-  await createOrUpdateArticle(
-    connection,
-    sourceId,
-    hotTopic.id,
-    market,
-    trend.topic,
-    trend.trendUrl,
-    trend.approxTraffic,
-    relatedArticles,
-    heatScore
+  await connection.execute(
+    "UPDATE hot_topics SET article_id = NULL WHERE id = ?",
+    [hotTopic.id]
   );
 
   let relatedProcessed = 0;
@@ -1030,8 +916,8 @@ async function processHotTopic(
   }
 
   return {
-    fetched: 1 + relatedArticles.length,
-    created: 1 + relatedProcessed,
+    fetched: relatedArticles.length,
+    created: relatedProcessed,
     skipped: Math.max(0, relatedArticles.length - relatedProcessed)
   };
 }
