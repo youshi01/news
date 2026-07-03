@@ -115,20 +115,25 @@ export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
   const isInternalAdminRewrite =
     request.headers.get("x-internal-admin-rewrite") === adminPath;
-  const isDefaultAdmin = isPathOrChild(pathname, "/admin");
-  const isCustomAdmin = isPathOrChild(pathname, adminPath);
+  const isSourceAdmin = isPathOrChild(pathname, "/admin");
+  const isConfiguredAdmin = isPathOrChild(pathname, adminPath);
+  const isDefaultPhysicalAdmin = isPathOrChild(pathname, DEFAULT_ADMIN_PATH);
 
-  if (!isDefaultAdmin && !isCustomAdmin) {
+  if (!isSourceAdmin && !isConfiguredAdmin && !isDefaultPhysicalAdmin) {
     return NextResponse.next();
   }
 
-  if (isDefaultAdmin && adminPath !== "/admin" && !isInternalAdminRewrite) {
+  if (isSourceAdmin && adminPath !== "/admin" && !isInternalAdminRewrite) {
     return notFound();
   }
 
-  const effectivePath = isCustomAdmin
-    ? pathname
-    : `${adminPath}${pathname.slice("/admin".length)}`;
+  if (isDefaultPhysicalAdmin && adminPath !== DEFAULT_ADMIN_PATH) {
+    return notFound();
+  }
+
+  const effectivePath = isSourceAdmin
+    ? `${adminPath}${pathname.slice("/admin".length)}`
+    : pathname;
   const isLogin = effectivePath === `${adminPath}/login`;
   const runtime = await fetchRuntime(request, true);
   const authenticated = Boolean(runtime?.authenticated);
@@ -141,7 +146,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL(adminPath, request.url));
   }
 
-  if (isCustomAdmin && adminPath !== "/admin") {
+  if (isDefaultPhysicalAdmin && adminPath === DEFAULT_ADMIN_PATH) {
+    return NextResponse.next();
+  }
+
+  if (isConfiguredAdmin && adminPath !== "/admin") {
     return rewriteAdmin(request, adminPath, pathname);
   }
 

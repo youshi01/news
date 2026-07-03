@@ -1,5 +1,6 @@
 import { LockKeyhole } from "lucide-react";
 import { adminHref } from "@/lib/admin-path";
+import { loginAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ export default async function AdminLoginPage({
           </div>
         )}
 
-        <form className="install-form" action="/api/admin/login" method="post">
+        <form className="install-form" action={loginAction}>
           <input type="hidden" name="next" value={next || adminHref()} />
           <label>
             管理员账号
