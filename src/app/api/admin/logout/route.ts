@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ADMIN_SESSION_COOKIE } from "@/lib/admin-security";
+import { ADMIN_SESSION_COOKIE, useSecureAdminCookie } from "@/lib/admin-security";
 import { adminHref } from "@/lib/admin-path";
 
 export async function POST() {
@@ -14,7 +14,7 @@ export async function POST() {
     value: "",
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: useSecureAdminCookie(),
     path: "/",
     maxAge: 0
   });

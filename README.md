@@ -28,6 +28,7 @@ ADMIN_PATH=/your-private-admin-path
 ADMIN_USER=your_admin
 ADMIN_PASSWORD=your_long_random_password
 ADMIN_INTERNAL_TOKEN=your_long_internal_token
+ADMIN_COOKIE_SECURE=false
 INSTALL_TOKEN=your_long_install_token
 ```
 
@@ -57,6 +58,7 @@ docker run -d \
   -e ADMIN_USER=admin \
   -e ADMIN_PASSWORD=ChangeMe_2026_admin \
   -e ADMIN_INTERNAL_TOKEN=ChangeMe_Internal_Admin_2026 \
+  -e ADMIN_COOKIE_SECURE=false \
   -e INSTALL_TOKEN=ChangeMe_Install_2026 \
   ghcr.io/youshi01/news:latest
 ```
@@ -102,8 +104,11 @@ ADMIN_PATH=/manage-8f3k2
 ADMIN_USER=admin
 ADMIN_PASSWORD=ChangeMe_2026_admin
 ADMIN_INTERNAL_TOKEN=ChangeMe_Internal_Admin_2026
+ADMIN_COOKIE_SECURE=false
 INSTALL_TOKEN=ChangeMe_Install_2026
 ```
+
+本地或直接用 `http://服务器IP:3000` 测试时，`ADMIN_COOKIE_SECURE` 必须保持 `false`，否则浏览器不会保存登录 Cookie。正式 HTTPS 反代上线后可以改成 `true`。
 
 ## 本地开发
 

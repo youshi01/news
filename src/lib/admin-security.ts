@@ -224,6 +224,10 @@ export function getAdminSessionMaxAge() {
   return SESSION_MAX_AGE_SECONDS;
 }
 
+export function useSecureAdminCookie() {
+  return getEnv("ADMIN_COOKIE_SECURE") === "true";
+}
+
 export function updateAdminCredentials(input: {
   currentPassword: string;
   username: string;

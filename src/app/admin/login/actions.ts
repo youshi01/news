@@ -8,6 +8,7 @@ import {
   createAdminSessionValue,
   getAdminSessionMaxAge,
   getCurrentAdminPath,
+  useSecureAdminCookie,
   verifyAdminPassword
 } from "@/lib/admin-security";
 
@@ -55,7 +56,7 @@ export async function loginAction(formData: FormData) {
     value: createAdminSessionValue(),
     httpOnly: true,
     sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
+    secure: useSecureAdminCookie(),
     path: "/",
     maxAge: getAdminSessionMaxAge()
   });
