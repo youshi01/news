@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { formatDateTime } from "@/lib/date-format";
 import type { NewsArticle } from "@/lib/types";
+import { NewsImage } from "@/components/NewsImage";
 
 type ArticleCardProps = {
   article: NewsArticle;
@@ -11,7 +12,12 @@ export function ArticleCard({ article, compact }: ArticleCardProps) {
   return (
     <article className={compact ? "article-card compact" : "article-card"}>
       <Link href={`/${article.locale}/news/${article.slug}`} className="image-link">
-        <img src={article.imageUrl} alt="" loading="lazy" />
+        <NewsImage
+          src={article.imageUrl}
+          title={article.title}
+          category={article.categorySlug}
+          seed={article.slug}
+        />
       </Link>
       <div className="article-card-body">
         <div className="meta-row">

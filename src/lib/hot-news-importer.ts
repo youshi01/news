@@ -27,6 +27,13 @@ type RelatedArticle = {
   sourceName?: string;
 };
 
+type ArticleMetadata = {
+  canonicalUrl: string | null;
+  title: string | null;
+  imageUrl: string | null;
+  publishedAt: string | null;
+};
+
 type NewsFeedItem = Parser.Item & {
   source?: string;
   "media:content"?: {
@@ -263,7 +270,7 @@ function toValidDate(input: string | null | undefined) {
 }
 
 function trendTitle(topic: string, market: MarketConfig) {
-  return `${topic}: why it is trending in ${market.name}`;
+  return `${topic}: latest news roundup in ${market.name}`;
 }
 
 function buildDescription(topic: string, market: MarketConfig, articles: RelatedArticle[]) {
@@ -274,7 +281,7 @@ function buildDescription(topic: string, market: MarketConfig, articles: Related
     .join(", ");
 
   return truncate(
-    `${topic} is trending in ${market.name}. This briefing tracks the latest signals${domains ? ` from ${domains}` : ""} and explains why the story may matter.`,
+    `Latest coverage on ${topic} from ${market.name}${domains ? `, including reports from ${domains}` : ""}.`,
     180
   );
 }
@@ -282,8 +289,7 @@ function buildDescription(topic: string, market: MarketConfig, articles: Related
 function buildContent(
   topic: string,
   market: MarketConfig,
-  articles: RelatedArticle[],
-  approxTraffic?: string
+  articles: RelatedArticle[]
 ) {
   const sourceItems = articles
     .slice(0, 8)
@@ -297,9 +303,9 @@ function buildContent(
     .join("");
 
   return [
-    `<p><strong>${escapeHtml(topic)}</strong> is currently appearing as a hot search signal in ${escapeHtml(market.name)}${approxTraffic ? ` with estimated search interest of ${escapeHtml(approxTraffic)}` : ""}.</p>`,
-    `<p><strong>Why it matters:</strong> Hot search demand can reveal breaking news, product launches, public safety alerts, entertainment spikes, or policy changes before they become stable long-tail SEO topics.</p>`,
-    `<p><strong>Editorial note:</strong> This page is an automated trend briefing. It summarizes public signals and links readers to original reporting for full context.</p>`,
+    `<p><strong>${escapeHtml(topic)}</strong> is drawing new coverage in ${escapeHtml(market.name)}. This page brings together recent reports and source links for quick follow-up.</p>`,
+    `<p><strong>What to watch:</strong> Track official updates, affected companies or people, regional impact, and whether the story develops beyond the first wave of coverage.</p>`,
+    `<p><strong>Sources:</strong> The links below point to original reporting and public updates. Details can change as publishers update their stories.</p>`,
     sourceItems ? `<h2>Source links</h2><ul>${sourceItems}</ul>` : ""
   ].join("");
 }
@@ -318,6 +324,130 @@ function normalizeImageUrl(imageUrl: string | null | undefined, baseUrl: string)
     return url.toString();
   } catch {
     return null;
+  }
+}
+
+function decodeHtml(input = "") {
+  return input
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#039;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&#x2F;/g, "/");
+}
+
+function getTagAttribute(tag: string, attribute: string) {
+  const pattern = new RegExp(`${attribute}\\s*=\\s*(['"])(.*?)\\1`, "i");
+  return decodeHtml(tag.match(pattern)?.[2] || "").trim() || null;
+}
+
+function getMetaContent(html: string, keys: string[]) {
+  const tags = html.match(/<meta\b[^>]*>/gi) || [];
+  const normalizedKeys = keys.map((key) => key.toLowerCase());
+
+  for (const key of normalizedKeys) {
+    for (const tag of tags) {
+      const property = getTagAttribute(tag, "property")?.toLowerCase();
+      const name = getTagAttribute(tag, "name")?.toLowerCase();
+
+      if (property === key || name === key) {
+        return getTagAttribute(tag, "content");
+      }
+    }
+  }
+
+  return null;
+}
+
+function getCanonicalUrl(html: string, baseUrl: string) {
+  const links = html.match(/<link\b[^>]*>/gi) || [];
+
+  for (const link of links) {
+    const rel = getTagAttribute(link, "rel");
+
+    if (rel?.toLowerCase().split(/\s+/).includes("canonical")) {
+      return normalizeImageUrl(getTagAttribute(link, "href"), baseUrl);
+    }
+  }
+
+  return null;
+}
+
+function getTitleTag(html: string) {
+  const match = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  return match ? stripHtml(decodeHtml(match[1])).trim() : null;
+}
+
+function emptyArticleMetadata(): ArticleMetadata {
+  return {
+    canonicalUrl: null,
+    title: null,
+    imageUrl: null,
+    publishedAt: null
+  };
+}
+
+function isGoogleNewsUrl(input: string) {
+  try {
+    return new URL(input).hostname.replace(/^www\./, "") === "news.google.com";
+  } catch {
+    return false;
+  }
+}
+
+async function fetchArticleMetadata(articleUrl: string): Promise<ArticleMetadata> {
+  const normalizedUrl = normalizeImageUrl(articleUrl, articleUrl);
+
+  if (!normalizedUrl) {
+    return emptyArticleMetadata();
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const response = await fetch(normalizedUrl, {
+      signal: controller.signal,
+      redirect: "follow",
+      headers: {
+        accept: "text/html,application/xhtml+xml",
+        "user-agent": "SoutheastSignalBot/0.1 (+https://example.com)"
+      }
+    });
+
+    if (!response.ok) {
+      return emptyArticleMetadata();
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    if (contentType && !contentType.includes("text/html")) {
+      return emptyArticleMetadata();
+    }
+
+    const html = await response.text();
+    const finalUrl = response.url || normalizedUrl;
+    const title = getMetaContent(html, ["og:title", "twitter:title"]) || getTitleTag(html);
+    const imageUrl = getMetaContent(html, ["og:image", "twitter:image", "image"]);
+    const publishedAt = getMetaContent(html, [
+      "article:published_time",
+      "article:published",
+      "datePublished",
+      "pubdate"
+    ]);
+    const canonicalUrl = getCanonicalUrl(html, finalUrl) || finalUrl;
+
+    return {
+      canonicalUrl: normalizeImageUrl(canonicalUrl, finalUrl),
+      title,
+      imageUrl: normalizeImageUrl(imageUrl, finalUrl),
+      publishedAt
+    };
+  } catch {
+    return emptyArticleMetadata();
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
@@ -418,25 +548,42 @@ async function getGoogleNewsArticles(topic: string, market: MarketConfig) {
   try {
     const feed = await newsParser.parseURL(url.toString());
 
-    return feed.items
+    const fetchMetadata = getEnv("HOT_NEWS_FETCH_METADATA", "true") !== "false";
+    const metadataLimit = Number(getEnv("HOT_NEWS_METADATA_PER_TOPIC", "4"));
+    const items = feed.items
       .filter((item) => item.link && item.title)
-      .slice(0, maxRecords)
-      .map((item) => {
+      .slice(0, maxRecords);
+
+    return Promise.all(
+      items.map(async (item, index) => {
         const sourceName = stripHtml(item.source || "").trim();
         const link = item.link || "";
-        const title = cleanNewsTitle(item.title || "", sourceName);
+        const metadata =
+          fetchMetadata && index < metadataLimit
+            ? await fetchArticleMetadata(link)
+            : emptyArticleMetadata();
+        const articleUrl =
+          metadata.canonicalUrl && !isGoogleNewsUrl(metadata.canonicalUrl)
+            ? metadata.canonicalUrl
+            : link;
+        const title = cleanNewsTitle(metadata.title || item.title || "", sourceName);
+        const imageUrl =
+          normalizeImageUrl(newsFeedImage(item), articleUrl) ||
+          normalizeImageUrl(metadata.imageUrl, articleUrl) ||
+          undefined;
 
         return {
-          url: link,
+          url: articleUrl,
           title,
-          seendate: item.isoDate || item.pubDate,
-          socialimage: normalizeImageUrl(newsFeedImage(item), link) || undefined,
-          domain: sourceName || hostname(link),
+          seendate: metadata.publishedAt || item.isoDate || item.pubDate,
+          socialimage: imageUrl,
+          domain: sourceName || hostname(articleUrl),
           language: market.locale,
           sourcecountry: market.geo,
           sourceName
         };
-      });
+      })
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.warn(`[hot-news] Google News skipped for "${topic}": ${message}`);
@@ -564,8 +711,8 @@ async function createOrUpdateArticle(
 ) {
   const title = trendTitle(topic, market);
   const description = buildDescription(topic, market, articles);
-  const summary = `${topic} is a current search trend in ${market.name}.`;
-  const contentHtml = buildContent(topic, market, articles, approxTraffic);
+  const summary = `${topic} is part of the latest news cycle in ${market.name}.`;
+  const contentHtml = buildContent(topic, market, articles);
   const sourceUrl = articles[0]?.url || trendUrl;
   const storedSourceUrl = columnUrl(sourceUrl, trendUrl);
   const imageUrl = normalizeImageUrl(articles.find((article) => article.socialimage)?.socialimage, sourceUrl);
@@ -691,16 +838,16 @@ async function createOrUpdateRelatedArticle(
   }
 
   const description = truncate(
-    `${title} is related to the current ${topic} trend in ${market.name}.`,
+    `${title} is part of the latest coverage on ${topic} in ${market.name}.`,
     180
   );
   const summary = truncate(
-    `${title} is one of the latest news signals connected to ${topic}.`,
+    `${title} adds context to the wider ${topic} story.`,
     260
   );
   const contentHtml = [
     `<p>${escapeHtml(summary)}</p>`,
-    `<p><strong>Trend context:</strong> This article was discovered while tracking the hot search topic <strong>${escapeHtml(topic)}</strong> in ${escapeHtml(market.name)}.</p>`,
+    `<p>This story is linked with recent coverage around <strong>${escapeHtml(topic)}</strong> in ${escapeHtml(market.name)}.</p>`,
     `<p><strong>Source:</strong> <a href="${escapeHtml(sourceUrl)}" rel="nofollow noopener" target="_blank">${escapeHtml(sourceName)}</a></p>`
   ].join("");
   const imageUrl = normalizeImageUrl(article.socialimage, sourceUrl);

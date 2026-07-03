@@ -15,8 +15,10 @@ type ArticleRow = RowDataPacket & {
   content_html: string | null;
   image_url: string | null;
   media_asset_id: number | null;
+  media_asset_type: string | null;
   category_slug: string;
   source_name: string | null;
+  source_type: string | null;
   source_url: string;
   published_at: Date | null;
   heat_score: number;
@@ -25,6 +27,38 @@ type ArticleRow = RowDataPacket & {
 function safeIsoDate(value: Date | string | null | undefined) {
   const date = value ? new Date(value) : new Date();
   return Number.isNaN(date.getTime()) ? new Date().toISOString() : date.toISOString();
+}
+
+function placeholderImageUrl(row: ArticleRow) {
+  const params = new URLSearchParams({
+    title: row.title || row.category_slug || "News",
+    category: row.category_slug || "news",
+    seed: String(row.id || row.slug || row.title || "news")
+  });
+
+  return `/api/placeholder-image?${params.toString()}`;
+}
+
+function articleImageUrl(row: ArticleRow) {
+  if (row.image_url) {
+    return row.image_url;
+  }
+
+  if (row.media_asset_id && row.media_asset_type === "image") {
+    return `/api/media/${row.media_asset_id}`;
+  }
+
+  return placeholderImageUrl(row);
+}
+
+function sourceName(row: ArticleRow) {
+  const name = row.source_name || "Unknown source";
+
+  if (row.source_type === "hot_trends") {
+    return name.replace(/^Google Trends\s*/i, "Trend Desk ").trim() || "Trend Desk";
+  }
+
+  return name;
 }
 
 function mapArticle(row: ArticleRow): NewsArticle {
@@ -39,13 +73,9 @@ function mapArticle(row: ArticleRow): NewsArticle {
     summary: row.summary || truncate(stripHtml(content), 220),
     contentHtml: row.content_html || `<p>${row.summary || row.description}</p>`,
     mediaAssetId: row.media_asset_id ? Number(row.media_asset_id) : null,
-    imageUrl:
-      row.media_asset_id
-        ? `/api/media/${row.media_asset_id}`
-        : row.image_url ||
-          "https://images.unsplash.com/photo-1504711434969-e33886168f5c?auto=format&fit=crop&w=1200&q=80",
+    imageUrl: articleImageUrl(row),
     categorySlug: row.category_slug,
-    sourceName: row.source_name || "Unknown source",
+    sourceName: sourceName(row),
     sourceUrl: row.source_url,
     publishedAt: safeIsoDate(row.published_at),
     heatScore: Number(row.heat_score || 0),
@@ -67,14 +97,17 @@ export async function getArticles(localeParam?: string, limit = 12) {
         t.content_html,
         COALESCE(t.og_image, a.image_url) AS image_url,
         a.media_asset_id,
+        ma.asset_type AS media_asset_type,
         a.category_slug,
         a.source_url,
         a.published_at,
         a.heat_score,
-        s.name AS source_name
+        s.name AS source_name,
+        s.source_type AS source_type
       FROM article_translations t
       INNER JOIN articles a ON a.id = t.article_id
       LEFT JOIN sources s ON s.id = a.source_id
+      LEFT JOIN media_assets ma ON ma.id = a.media_asset_id
       WHERE t.locale = ? AND a.status = 'published'
       ORDER BY COALESCE(a.published_at, a.imported_at) DESC, a.id DESC
       LIMIT ?
@@ -103,14 +136,17 @@ export async function getTrendingArticles(localeParam?: string, limit = 8) {
         t.content_html,
         COALESCE(t.og_image, a.image_url) AS image_url,
         a.media_asset_id,
+        ma.asset_type AS media_asset_type,
         a.category_slug,
         a.source_url,
         a.published_at,
         a.heat_score,
-        s.name AS source_name
+        s.name AS source_name,
+        s.source_type AS source_type
       FROM article_translations t
       INNER JOIN articles a ON a.id = t.article_id
       LEFT JOIN sources s ON s.id = a.source_id
+      LEFT JOIN media_assets ma ON ma.id = a.media_asset_id
       WHERE t.locale = ? AND a.status = 'published'
       ORDER BY a.heat_score DESC, COALESCE(a.published_at, a.imported_at) DESC
       LIMIT ?
@@ -142,14 +178,17 @@ export async function getArticleBySlug(localeParam: string, slug: string) {
         t.content_html,
         COALESCE(t.og_image, a.image_url) AS image_url,
         a.media_asset_id,
+        ma.asset_type AS media_asset_type,
         a.category_slug,
         a.source_url,
         a.published_at,
         a.heat_score,
-        s.name AS source_name
+        s.name AS source_name,
+        s.source_type AS source_type
       FROM article_translations t
       INNER JOIN articles a ON a.id = t.article_id
       LEFT JOIN sources s ON s.id = a.source_id
+      LEFT JOIN media_assets ma ON ma.id = a.media_asset_id
       WHERE t.locale = ? AND t.slug = ? AND a.status = 'published'
       LIMIT 1
     `,

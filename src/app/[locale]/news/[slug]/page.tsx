@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { Analytics } from "@/components/Analytics";
 import { AdSlot } from "@/components/AdSlot";
 import { ArticleCard } from "@/components/ArticleCard";
+import { NewsImage } from "@/components/NewsImage";
 import { getArticleBySlug, getArticles } from "@/lib/data";
 import { formatDateTime } from "@/lib/date-format";
 import { normalizeLocale, SUPPORTED_LOCALES } from "@/lib/locales";
@@ -109,7 +110,13 @@ export default async function ArticlePage({
         </header>
         <AdSlot placement="article_after_title" />
         <div className="article-hero-image">
-          <img src={article.imageUrl} alt="" />
+          <NewsImage
+            src={article.imageUrl}
+            title={article.title}
+            category={article.categorySlug}
+            seed={article.slug}
+            loading="eager"
+          />
         </div>
         <div
           className="article-body"
