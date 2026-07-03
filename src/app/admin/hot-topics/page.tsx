@@ -56,7 +56,7 @@ export default async function AdminHotTopicsPage({
                   </small>
                 </span>
                 {topic.articleSlug ? (
-                  <Link className="text-button" href={`/${topic.locale}/news/${topic.articleSlug}`}>
+                  <Link className="text-button" href={`/${topic.articleLocale || topic.locale}/news/${topic.articleSlug}`}>
                     打开
                   </Link>
                 ) : (

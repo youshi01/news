@@ -11,6 +11,7 @@ export type HotTopic = {
   timesSeen: number;
   articleId: number | null;
   lastSeenAt: string;
+  articleLocale: string | null;
   articleSlug: string | null;
 };
 
@@ -27,6 +28,7 @@ export async function getHotTopics(limit = 80) {
         times_seen: number;
         article_id: number | null;
         last_seen_at: Date;
+        article_locale: string | null;
         article_slug: string | null;
       }
     >
@@ -42,7 +44,26 @@ export async function getHotTopics(limit = 80) {
         h.times_seen,
         h.article_id,
         h.last_seen_at,
-        t.slug AS article_slug
+        COALESCE(
+          t.locale,
+          (
+            SELECT t2.locale
+            FROM article_translations t2
+            WHERE t2.article_id = h.article_id
+            ORDER BY t2.locale = 'en' DESC, t2.id ASC
+            LIMIT 1
+          )
+        ) AS article_locale,
+        COALESCE(
+          t.slug,
+          (
+            SELECT t2.slug
+            FROM article_translations t2
+            WHERE t2.article_id = h.article_id
+            ORDER BY t2.locale = 'en' DESC, t2.id ASC
+            LIMIT 1
+          )
+        ) AS article_slug
       FROM hot_topics h
       LEFT JOIN article_translations t
         ON t.article_id = h.article_id AND t.locale = h.locale
@@ -62,6 +83,7 @@ export async function getHotTopics(limit = 80) {
     timesSeen: Number(row.times_seen || 0),
     articleId: row.article_id ? Number(row.article_id) : null,
     lastSeenAt: row.last_seen_at.toISOString(),
+    articleLocale: row.article_locale,
     articleSlug: row.article_slug
   }));
 }

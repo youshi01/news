@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import Parser from "rss-parser";
 import mysql from "mysql2/promise";
 import { getEnv } from "@/lib/env";
-import { SUPPORTED_LOCALES } from "@/lib/locales";
+import { DEFAULT_LOCALE, SUPPORTED_LOCALES } from "@/lib/locales";
 import { getRuntimeDatabaseUrl } from "@/lib/runtime-config";
 import { sha256, slugify, stripHtml, truncate } from "@/lib/text";
 
@@ -40,6 +40,8 @@ const parser = new Parser<unknown, TrendItem>({
   }
 });
 
+let lastGdeltRequestAt = 0;
+
 function getDatabaseUrl() {
   const url = getRuntimeDatabaseUrl();
 
@@ -75,6 +77,22 @@ function parseTraffic(input = "") {
   }
 
   return Math.round(value);
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+function translationLocales(primaryLocale: string) {
+  return Array.from(
+    new Set(
+      [primaryLocale, DEFAULT_LOCALE, ...SUPPORTED_LOCALES, "en"]
+        .map((locale) => locale.trim())
+        .filter(Boolean)
+    )
+  );
 }
 
 function categoryForTopic(topic: string) {
@@ -250,6 +268,18 @@ async function getTrendItems(market: MarketConfig) {
 
 async function getGdeltArticles(topic: string) {
   const maxRecords = Number(getEnv("HOT_NEWS_ARTICLES_PER_TOPIC", "6"));
+  if (maxRecords <= 0) {
+    return [] as GdeltArticle[];
+  }
+
+  const minIntervalMs = Number(getEnv("GDELT_MIN_INTERVAL_MS", "5500"));
+  const elapsed = Date.now() - lastGdeltRequestAt;
+
+  if (elapsed < minIntervalMs) {
+    await sleep(minIntervalMs - elapsed);
+  }
+
+  lastGdeltRequestAt = Date.now();
   const url = new URL("https://api.gdeltproject.org/api/v2/doc/doc");
   url.searchParams.set("query", topic);
   url.searchParams.set("mode", "artlist");
@@ -258,13 +288,20 @@ async function getGdeltArticles(topic: string) {
   url.searchParams.set("sort", "hybridrel");
   url.searchParams.set("timespan", "2d");
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+
   const response = await fetch(url, {
+    signal: controller.signal,
     headers: {
       "user-agent": "SoutheastSignalBot/0.1"
     }
+  }).finally(() => {
+    clearTimeout(timeout);
   });
 
   if (!response.ok) {
+    console.warn(`[hot-news] GDELT skipped for "${topic}": HTTP ${response.status}`);
     return [] as GdeltArticle[];
   }
 
@@ -377,7 +414,7 @@ async function createOrUpdateArticle(
 
   const articleId = articleResult.insertId || (await findArticleId(connection, urlHash));
 
-  for (const locale of SUPPORTED_LOCALES) {
+  for (const locale of translationLocales(market.locale)) {
     await connection.execute(
       `
         INSERT INTO article_translations
@@ -443,6 +480,7 @@ async function findArticleId(connection: mysql.Connection, urlHash: string) {
 export async function importHotNews() {
   const connection = await mysql.createConnection(getDatabaseUrl());
   const markets = enabledMarkets();
+  let relatedLookupsRemaining = Number(getEnv("HOT_NEWS_RELATED_LOOKUPS_PER_RUN", "6"));
   const [task] = await connection.execute<mysql.ResultSetHeader>(
     `
       INSERT INTO import_tasks (task_type, status, started_at)
@@ -464,7 +502,18 @@ export async function importHotNews() {
           continue;
         }
 
-        const relatedArticles = await getGdeltArticles(trend.topic);
+        let relatedArticles: GdeltArticle[] = [];
+
+        if (relatedLookupsRemaining > 0) {
+          relatedLookupsRemaining -= 1;
+          try {
+            relatedArticles = await getGdeltArticles(trend.topic);
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.warn(`[hot-news] related news skipped for "${trend.topic}": ${message}`);
+          }
+        }
+
         const heatScore =
           Math.min(99, Math.round(parseTraffic(trend.approxTraffic) / 2000)) +
           Math.min(20, relatedArticles.length * 3);
