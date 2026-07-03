@@ -39,6 +39,32 @@ docker compose up -d
 docker pull ghcr.io/youshi01/news:latest
 ```
 
+直接运行镜像：
+
+```bash
+docker run -d \
+  --name news \
+  -p 3000:3000 \
+  -v $(pwd)/data:/app/data \
+  -e ADMIN_PATH=/manage-8f3k2 \
+  -e ADMIN_USER=admin \
+  -e ADMIN_PASSWORD=ChangeMe_2026_admin \
+  -e INSTALL_TOKEN=ChangeMe_Install_2026 \
+  ghcr.io/youshi01/news:latest
+```
+
+启动后访问：
+
+```text
+http://服务器IP:3000/
+```
+
+第一次访问会进入 `/install` 初始化数据库。初始化完成后后台入口是：
+
+```text
+http://服务器IP:3000/manage-8f3k2
+```
+
 ## 本地开发
 
 ```bash
