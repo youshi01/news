@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Parser from "rss-parser";
 import mysql from "mysql2/promise";
+import { getEnv } from "../src/lib/env";
 import { SUPPORTED_LOCALES } from "../src/lib/locales";
 import { getRuntimeDatabaseUrl } from "../src/lib/runtime-config";
 import { sha256, slugify, stripHtml, truncate } from "../src/lib/text";
@@ -52,7 +53,7 @@ function getDatabaseUrl() {
 }
 
 function enabledMarkets() {
-  return (process.env.HOT_NEWS_MARKETS || "ID,VN,TH,MY,PH")
+  return getEnv("HOT_NEWS_MARKETS", "ID,VN,TH,MY,PH")
     .split(",")
     .map((market) => market.trim().toUpperCase())
     .filter((market) => marketConfigs[market])
@@ -227,7 +228,7 @@ async function ensureHotSource(connection: mysql.Connection, market: MarketConfi
       name,
       `https://trends.google.com/trending?geo=${market.geo}`,
       market.locale,
-      Number(process.env.FETCH_INTERVAL_MINUTES || 30)
+      Number(getEnv("FETCH_INTERVAL_MINUTES", "30"))
     ]
   );
 
@@ -237,7 +238,7 @@ async function ensureHotSource(connection: mysql.Connection, market: MarketConfi
 async function getTrendItems(market: MarketConfig) {
   const feedUrl = `https://trends.google.com/trending/rss?geo=${market.geo}`;
   const feed = await parser.parseURL(feedUrl);
-  const limit = Number(process.env.HOT_NEWS_TOPICS_PER_MARKET || 8);
+  const limit = Number(getEnv("HOT_NEWS_TOPICS_PER_MARKET", "8"));
 
   return feed.items
     .filter((item) => item.title)
@@ -250,7 +251,7 @@ async function getTrendItems(market: MarketConfig) {
 }
 
 async function getGdeltArticles(topic: string) {
-  const maxRecords = Number(process.env.HOT_NEWS_ARTICLES_PER_TOPIC || 6);
+  const maxRecords = Number(getEnv("HOT_NEWS_ARTICLES_PER_TOPIC", "6"));
   const url = new URL("https://api.gdeltproject.org/api/v2/doc/doc");
   url.searchParams.set("query", topic);
   url.searchParams.set("mode", "artlist");

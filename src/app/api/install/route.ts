@@ -3,6 +3,7 @@ import path from "node:path";
 import mysql from "mysql2/promise";
 import { NextResponse } from "next/server";
 import { adminHref } from "@/lib/admin-path";
+import { getEnv } from "@/lib/env";
 import { isInstalled, writeInstallConfig } from "@/lib/runtime-config";
 
 const DEFAULT_INSTALL_TOKEN = "ChangeMe_Install_2026";
@@ -42,16 +43,34 @@ function buildDatabaseUrl(input: {
 function readSchemaSql(database: string) {
   const initPath = path.join(process.cwd(), "sql", "init.sql");
   const initSql = fs.readFileSync(initPath, "utf8");
-  const schemaSql = initSql.replace(
+
+  return initSql.replace(
     /CREATE DATABASE IF NOT EXISTS news_site[\s\S]*?;\s*USE news_site;\s*/i,
     ""
   );
+}
 
-  return [
-    `CREATE DATABASE IF NOT EXISTS ${escapeIdentifier(database)} CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`,
-    `USE ${escapeIdentifier(database)}`,
-    schemaSql
-  ].join(";\n");
+async function initializeSchema(connection: mysql.Connection, database: string) {
+  const escapedDatabase = escapeIdentifier(database);
+
+  try {
+    await connection.query(
+      `CREATE DATABASE IF NOT EXISTS ${escapedDatabase} CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci`
+    );
+  } catch (error) {
+    console.warn("CREATE DATABASE failed, trying to use existing database:", error);
+  }
+
+  await connection.query(`USE ${escapedDatabase}`);
+  await connection.query(readSchemaSql(database));
+}
+
+function databaseErrorDetail(error: unknown) {
+  if (error instanceof Error) {
+    return encodeURIComponent(error.message.slice(0, 220));
+  }
+
+  return "";
 }
 
 export async function POST(request: Request) {
@@ -60,7 +79,7 @@ export async function POST(request: Request) {
   }
 
   const formData = await request.formData();
-  const expectedToken = process.env.INSTALL_TOKEN || "";
+  const expectedToken = getEnv("INSTALL_TOKEN");
   const submittedToken = cleanField(formData, "installToken");
   const usesDefaultInstallToken =
     !expectedToken || expectedToken === DEFAULT_INSTALL_TOKEN;
@@ -93,8 +112,10 @@ export async function POST(request: Request) {
     return NextResponse.redirect(new URL("/install?error=input", request.url), 303);
   }
 
+  let connection: mysql.Connection | null = null;
+
   try {
-    const connection = await mysql.createConnection({
+    connection = await mysql.createConnection({
       host,
       port,
       user,
@@ -102,8 +123,7 @@ export async function POST(request: Request) {
       multipleStatements: true
     });
 
-    await connection.query(readSchemaSql(database));
-    await connection.end();
+    await initializeSchema(connection, database);
 
     writeInstallConfig({
       databaseUrl: buildDatabaseUrl({ host, port, database, user, password }),
@@ -114,6 +134,14 @@ export async function POST(request: Request) {
     return redirectToAdmin(request);
   } catch (error) {
     console.error("Install failed:", error);
-    return NextResponse.redirect(new URL("/install?error=database", request.url), 303);
+    const detail = databaseErrorDetail(error);
+    return NextResponse.redirect(
+      new URL(`/install?error=database${detail ? `&detail=${detail}` : ""}`, request.url),
+      303
+    );
+  } finally {
+    if (connection) {
+      await connection.end().catch(() => {});
+    }
   }
 }

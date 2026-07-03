@@ -1,7 +1,9 @@
-export const DEFAULT_LOCALE = process.env.DEFAULT_LOCALE || "en";
+import { getEnv } from "@/lib/env";
+
+export const DEFAULT_LOCALE = getEnv("DEFAULT_LOCALE", "en");
 
 export const SUPPORTED_LOCALES = (
-  process.env.SUPPORTED_LOCALES || "en,id,vi,th"
+  getEnv("SUPPORTED_LOCALES", "en,id,vi,th")
 )
   .split(",")
   .map((locale) => locale.trim())

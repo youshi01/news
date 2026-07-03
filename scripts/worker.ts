@@ -1,8 +1,9 @@
 import { importFeeds } from "./import-feeds";
 import { importHotNews } from "./import-hot-news";
+import { getEnv } from "../src/lib/env";
 import { getRuntimeDatabaseUrl } from "../src/lib/runtime-config";
 
-const intervalMinutes = Number(process.env.FETCH_INTERVAL_MINUTES || 30);
+const intervalMinutes = Number(getEnv("FETCH_INTERVAL_MINUTES", "30"));
 const intervalMs = Math.max(5, intervalMinutes) * 60 * 1000;
 const setupCheckMs = 60 * 1000;
 
@@ -19,7 +20,7 @@ async function runOnce() {
   try {
     await importHotNews();
 
-    if (process.env.ENABLE_RSS_IMPORT === "true") {
+    if (getEnv("ENABLE_RSS_IMPORT") === "true") {
       await importFeeds();
     }
   } catch (error) {

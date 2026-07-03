@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import Parser from "rss-parser";
 import mysql from "mysql2/promise";
+import { getEnv } from "../src/lib/env";
 import { SUPPORTED_LOCALES } from "../src/lib/locales";
 import { getRuntimeDatabaseUrl } from "../src/lib/runtime-config";
 import { sha256, slugify, stripHtml, truncate } from "../src/lib/text";
@@ -310,7 +311,7 @@ async function importSource(connection: mysql.Connection, source: SourceRow) {
 
   try {
     const feed = await parser.parseURL(source.rss_url);
-    const maxItems = Number(process.env.MAX_ITEMS_PER_SOURCE || 12);
+    const maxItems = Number(getEnv("MAX_ITEMS_PER_SOURCE", "12"));
 
     for (const item of feed.items.slice(0, maxItems)) {
       fetched += 1;

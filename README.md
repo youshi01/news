@@ -23,10 +23,10 @@ ChangeMe_Install_2026
 上线后请立即修改 `.env`：
 
 ```env
-ADMIN_PATH="/your-private-admin-path"
-ADMIN_USER="your_admin"
-ADMIN_PASSWORD="your_long_random_password"
-INSTALL_TOKEN="your_long_install_token"
+ADMIN_PATH=/your-private-admin-path
+ADMIN_USER=your_admin
+ADMIN_PASSWORD=your_long_random_password
+INSTALL_TOKEN=your_long_install_token
 ```
 
 ## Docker 运行
@@ -47,6 +47,7 @@ docker pull ghcr.io/youshi01/news:latest
 docker run -d \
   --name news \
   -p 3000:3000 \
+  --add-host=host.docker.internal:host-gateway \
   -v $(pwd)/data:/app/data \
   -e ADMIN_PATH=/manage-8f3k2 \
   -e ADMIN_USER=admin \
@@ -65,6 +66,27 @@ http://服务器IP:3000/
 
 ```text
 http://服务器IP:3000/manage-8f3k2
+```
+
+如果 MySQL 在宿主机上，初始化页面的 MySQL 主机建议填写：
+
+```text
+host.docker.internal
+```
+
+如果你的服务器 Docker 不支持这个名字，请填写宿主机内网 IP，或保留上面 `docker run` 里的：
+
+```bash
+--add-host=host.docker.internal:host-gateway
+```
+
+`.env` 建议不要给值加引号，特别是 Docker `env_file` 或 `--env-file` 部署时：
+
+```env
+ADMIN_PATH=/manage-8f3k2
+ADMIN_USER=admin
+ADMIN_PASSWORD=ChangeMe_2026_admin
+INSTALL_TOKEN=ChangeMe_Install_2026
 ```
 
 ## 本地开发

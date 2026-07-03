@@ -1,7 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
 
+function stripEnvQuotes(value?: string) {
+  const trimmed = value?.trim() || "";
+
+  if (trimmed.length >= 2) {
+    const first = trimmed[0];
+    const last = trimmed[trimmed.length - 1];
+
+    if ((first === `"` && last === `"`) || (first === "'" && last === "'")) {
+      return trimmed.slice(1, -1).trim();
+    }
+  }
+
+  return trimmed;
+}
+
+function getEnv(name: string, fallback = "") {
+  return stripEnvQuotes(process.env[name]) || fallback;
+}
+
 function getAdminPath() {
-  const raw = process.env.ADMIN_PATH || "/admin";
+  const raw = getEnv("ADMIN_PATH", "/admin");
   const trimmed = raw.trim();
   const withSlash = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
   const normalized = withSlash.replace(/\/+$/, "");
@@ -87,8 +106,8 @@ export function middleware(request: NextRequest) {
     return notFound();
   }
 
-  const user = process.env.ADMIN_USER;
-  const password = process.env.ADMIN_PASSWORD;
+  const user = getEnv("ADMIN_USER");
+  const password = getEnv("ADMIN_PASSWORD");
   const missingCredentials = !user || !password;
 
   if (missingCredentials && process.env.NODE_ENV === "production") {

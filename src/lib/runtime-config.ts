@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { getEnv } from "@/lib/env";
 
 type InstallConfig = {
   databaseUrl?: string;
@@ -8,7 +9,7 @@ type InstallConfig = {
 };
 
 export function getDataDir() {
-  return process.env.APP_DATA_DIR || path.join(process.cwd(), "data");
+  return getEnv("APP_DATA_DIR", path.join(process.cwd(), "data"));
 }
 
 export function getInstallConfigPath() {
@@ -25,11 +26,11 @@ export function readInstallConfig(): InstallConfig {
 }
 
 export function getRuntimeDatabaseUrl() {
-  return process.env.DATABASE_URL || readInstallConfig().databaseUrl || "";
+  return getEnv("DATABASE_URL") || readInstallConfig().databaseUrl || "";
 }
 
 export function getRuntimeSiteUrl() {
-  return readInstallConfig().siteUrl || process.env.SITE_URL || "http://localhost:3000";
+  return readInstallConfig().siteUrl || getEnv("SITE_URL", "http://localhost:3000");
 }
 
 export function isInstalled() {

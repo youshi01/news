@@ -812,6 +812,13 @@ img {
   padding: 12px;
 }
 
+.install-error small {
+  display: block;
+  font-weight: 700;
+  margin-top: 8px;
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 920px) {
   .main-layout,
   .article-page,

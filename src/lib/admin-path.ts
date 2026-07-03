@@ -1,5 +1,7 @@
+import { getEnv } from "@/lib/env";
+
 export function getAdminPath() {
-  const raw = process.env.ADMIN_PATH || "/admin";
+  const raw = getEnv("ADMIN_PATH", "/admin");
   const trimmed = raw.trim();
   const withSlash = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
   const normalized = withSlash.replace(/\/+$/, "");
