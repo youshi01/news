@@ -191,12 +191,61 @@ async function initializeSchema(connection: mysql.Connection, database: string) 
   await connection.query(readSchemaSql(database));
 }
 
-function databaseErrorDetail(error: unknown) {
-  if (error instanceof Error) {
-    return encodeURIComponent(error.message.slice(0, 220));
-  }
+function escapeHtml(input: string) {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
 
-  return "";
+function installErrorPage(input: {
+  title: string;
+  message: string;
+  detail?: string;
+}) {
+  const detail = input.detail ? `<pre>${escapeHtml(input.detail)}</pre>` : "";
+
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(input.title)}</title>
+  <style>
+    body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f4f6fb;color:#172033}
+    main{max-width:760px;margin:8vh auto;padding:32px;background:#fff;border:1px solid #d9e0ef;border-radius:8px}
+    h1{font-size:24px;margin:0 0 14px}
+    p{line-height:1.7;color:#4c5b73}
+    pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#101828;color:#f8fafc;padding:16px;border-radius:6px}
+    code{background:#edf2fb;padding:2px 5px;border-radius:4px}
+    a,button{display:inline-block;margin-top:14px;border:0;border-radius:6px;background:#183a8f;color:#fff;padding:10px 14px;text-decoration:none;font-weight:700}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>${escapeHtml(input.title)}</h1>
+    <p>${escapeHtml(input.message)}</p>
+    ${detail}
+    <p>如果错误里有 <code>Access denied</code>，请先给 MySQL 用户授权，或者安装时临时使用有建库权限的账号。</p>
+    <a href="/install">返回安装页</a>
+  </main>
+</body>
+</html>`;
+}
+
+function installErrorResponse(input: {
+  title: string;
+  message: string;
+  detail?: string;
+}) {
+  return new NextResponse(installErrorPage(input), {
+    status: 400,
+    headers: {
+      "content-type": "text/html; charset=utf-8"
+    }
+  });
 }
 
 export async function POST(request: Request) {
@@ -214,7 +263,10 @@ export async function POST(request: Request) {
     !usesDefaultInstallToken &&
     submittedToken !== expectedToken
   ) {
-    return NextResponse.redirect(new URL("/install?error=token", request.url), 303);
+    return installErrorResponse({
+      title: "安装口令不正确",
+      message: "如果你没有自定义 INSTALL_TOKEN，安装口令可以留空。"
+    });
   }
 
   const host = cleanField(formData, "host");
@@ -235,7 +287,10 @@ export async function POST(request: Request) {
     !user ||
     !password
   ) {
-    return NextResponse.redirect(new URL("/install?error=input", request.url), 303);
+    return installErrorResponse({
+      title: "安装信息不完整",
+      message: "请填写完整的 MySQL 主机、端口、数据库名、用户名和密码。数据库名只能包含字母、数字和下划线。"
+    });
   }
 
   let connection: mysql.Connection | null = null;
@@ -266,11 +321,13 @@ export async function POST(request: Request) {
     return redirectToAdmin(request);
   } catch (error) {
     console.error("Install failed:", error);
-    const detail = databaseErrorDetail(error);
-    return NextResponse.redirect(
-      new URL(`/install?error=database${detail ? `&detail=${detail}` : ""}`, request.url),
-      303
-    );
+    const detail = error instanceof Error ? error.message : String(error);
+
+    return installErrorResponse({
+      title: "数据库连接或初始化失败",
+      message: "请检查 MySQL 主机、端口、账号密码、数据库名和权限。",
+      detail
+    });
   } finally {
     if (connection) {
       await connection.end().catch(() => {});
