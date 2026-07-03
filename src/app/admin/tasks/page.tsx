@@ -38,7 +38,7 @@ export default async function AdminTasksPage() {
       ) : (
         <div className="empty-state">
           <h2>暂无任务记录</h2>
-          <p>启动 worker 或运行 npm run import:hot-news 后，这里会显示导入记录。</p>
+          <p>启动 worker、点击热点词页面的“立即导入热点”，或执行 docker exec news npm run import:hot-news 后，这里会显示导入记录。</p>
         </div>
       )}
     </main>

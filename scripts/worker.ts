@@ -1,6 +1,6 @@
 import { importFeeds } from "./import-feeds";
-import { importHotNews } from "./import-hot-news";
 import { getEnv } from "../src/lib/env";
+import { importHotNews } from "../src/lib/hot-news-importer";
 import { getRuntimeDatabaseUrl } from "../src/lib/runtime-config";
 
 const intervalMinutes = Number(getEnv("FETCH_INTERVAL_MINUTES", "30"));

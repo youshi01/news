@@ -119,6 +119,22 @@ npm run dev
 
 ## 热点导入
 
+后台可以直接进入“热点词”页面点击“立即导入热点”。
+
+如果使用 Docker 镜像运行，命令要在容器里执行，不要在服务器 `/home` 目录直接运行：
+
+```bash
+docker exec news npm run import:hot-news
+```
+
+如果使用 `docker compose`：
+
+```bash
+docker compose exec web npm run import:hot-news
+```
+
+源码开发环境才直接运行：
+
 ```bash
 npm run import:hot-news
 ```

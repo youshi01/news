@@ -3,11 +3,17 @@ import { AdminNav } from "@/components/AdminNav";
 import { localeLabel, marketLabel } from "@/lib/admin-labels";
 import { requireAdminPageSession } from "@/lib/admin-page-auth";
 import { getHotTopics } from "@/lib/hot-topics";
+import { importHotNewsAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminHotTopicsPage() {
+export default async function AdminHotTopicsPage({
+  searchParams
+}: {
+  searchParams: Promise<{ import?: string; detail?: string }>;
+}) {
   await requireAdminPageSession();
+  const importStatus = await searchParams;
   const topics = await getHotTopics(100);
 
   return (
@@ -17,12 +23,27 @@ export default async function AdminHotTopicsPage() {
           <div className="kicker">热点新闻引擎</div>
           <h1>热点词</h1>
         </div>
-        <span className="text-button">{topics.length} 个热点</span>
+        <form action={importHotNewsAction}>
+          <button className="text-button" type="submit">立即导入热点</button>
+        </form>
       </div>
       <AdminNav />
 
+      {importStatus.import === "done" && (
+        <div className="settings-success">
+          热点导入完成，下面会显示最新数据。
+        </div>
+      )}
+      {importStatus.import === "failed" && (
+        <div className="install-error">
+          热点导入失败。
+          {importStatus.detail && <small>{importStatus.detail}</small>}
+        </div>
+      )}
+
       {topics.length ? (
         <section className="admin-card">
+          <p>{topics.length} 个热点</p>
           <ul className="data-list">
             {topics.map((topic) => (
               <li key={topic.id}>
@@ -48,7 +69,7 @@ export default async function AdminHotTopicsPage() {
       ) : (
         <div className="empty-state">
           <h2>暂无热点词</h2>
-          <p>配置 DATABASE_URL 后运行 npm run import:hot-news，这里就会出现热点数据。</p>
+          <p>点击“立即导入热点”，或在容器里执行 docker exec news npm run import:hot-news。</p>
         </div>
       )}
     </main>
